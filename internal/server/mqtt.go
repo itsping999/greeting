@@ -1,42 +1,15 @@
 package server
 
 import (
-	"context"
-	"fmt"
-
 	"github.com/go-kratos/kratos/v2/log"
-	"github.com/tx7do/kratos-transport/transport/mqtt"
-
+	"github.com/itsping999/greeting/internal/conf"
+	"github.com/itsping999/greeting/internal/protocol"
+	"github.com/itsping999/greeting/internal/service"
 	"github.com/tx7do/kratos-transport/broker"
-	"github.com/wyuhsin/web-template-go/internal/conf"
-	"github.com/wyuhsin/web-template-go/internal/service"
+	"github.com/tx7do/kratos-transport/broker/mqtt"
+	"time"
 )
 
-// NewMQTTServer create a mqtt server.
-func NewMQTTServer(
-	c *conf.Server,
-	logger log.Logger,
-	svc *service.GreeterService,
-) *mqtt.Server {
-	ctx := context.Background()
-
-	srv := mqtt.NewServer(
-		mqtt.WithAddress([]string{c.Mqtt.Addr}),
-		mqtt.WithCodec("json"),
-	)
-
-	_ = srv.RegisterSubscriber(ctx,
-		"/hfp/v2/journey/ongoing/vp/bus/#",
-		func(ctx context.Context, evt broker.Event) error {
-			switch t := evt.Message().Body.(type) {
-			case any:
-				return nil
-			default:
-				return fmt.Errorf("unsupported type: %T", t)
-			}
-		},
-		func() broker.Any { return struct{}{} },
-	)
-
-	return srv
+func NewMQTTServer(c *conf.Server_MQTT, logger log.Logger, svc *service.GreeterService) *BrokerServer {
+	return &BrokerServer{broker: mqtt.NewBroker(broker.WithAddress(c.Addr), broker.WithCodec("json"), mqtt.WithConnectTimeout(5*time.Second), mqtt.WithWriteTimeout(5*time.Second)), name: "MQTT", topic: protocol.MQTTRequestTopic, replyPrefix: protocol.MQTTReplyPrefix, handle: svc.OnMQTTMessage, log: log.NewHelper(logger), opts: []broker.SubscribeOption{mqtt.WithSubscribeQos(1)}}
 }

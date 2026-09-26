@@ -1,0 +1,34 @@
+# Local protocol examples. MQTT and RabbitMQ connect to compose.yaml.
+server:
+  http:
+    enabled: true
+    addr: 127.0.0.1:8000
+    timeout: 5s
+  grpc:
+    enabled: true
+    addr: 127.0.0.1:9000
+    timeout: 5s
+  ws:
+    enabled: true
+    addr: 127.0.0.1:8001
+    path: /ws
+    timeout: 30s
+  mqtt:
+    enabled: true
+    addr: tcp://127.0.0.1:1883
+  rabbitmq:
+    enabled: true
+    addr: amqp://guest:guest@127.0.0.1:5672/
+  tcp:
+    enabled: true
+    addr: 127.0.0.1:9001
+    timeout: 5s
+  udp:
+    enabled: true
+    addr: 127.0.0.1:9002
+    timeout: 5s
+  kcp:
+    enabled: true
+    addr: 127.0.0.1:9003
+    timeout: 5s
+    # Provide key and salt through GREETING_KCP_KEY / GREETING_KCP_SALT.

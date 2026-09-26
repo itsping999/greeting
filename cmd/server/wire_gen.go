@@ -9,11 +9,11 @@ package main
 import (
 	"github.com/go-kratos/kratos/v2"
 	"github.com/go-kratos/kratos/v2/log"
-	"github.com/wyuhsin/web-template-go/internal/biz"
-	"github.com/wyuhsin/web-template-go/internal/conf"
-	"github.com/wyuhsin/web-template-go/internal/data"
-	"github.com/wyuhsin/web-template-go/internal/server"
-	"github.com/wyuhsin/web-template-go/internal/service"
+	"github.com/itsping999/greeting/internal/biz"
+	"github.com/itsping999/greeting/internal/conf"
+	"github.com/itsping999/greeting/internal/data"
+	"github.com/itsping999/greeting/internal/server"
+	"github.com/itsping999/greeting/internal/service"
 )
 
 import (
@@ -22,28 +22,15 @@ import (
 
 // Injectors from wire.go:
 
-// wireApp init kratos application.
-func wireApp(confServer *conf.Server, confData *conf.Data, logger log.Logger) (*kratos.App, func(), error) {
-	server_GRPC := confServer.Grpc
-	dataData, cleanup, err := data.NewData(confData, logger)
-	if err != nil {
-		return nil, nil, err
-	}
-	greeterRepo := data.NewGreeterRepo(dataData, logger)
-	greeterUsecase := biz.NewGreeterUsecase(greeterRepo, logger)
+func wireApp(confServer *conf.Server, logger log.Logger) (*kratos.App, error) {
+	dataData := data.NewData(logger)
+	greeterRepo := data.NewGreeterRepo(dataData)
+	greeterUsecase := biz.NewGreeterUsecase(greeterRepo)
 	greeterService := service.NewGreeterService(logger, greeterUsecase)
-	grpcServer := server.NewGRPCServer(server_GRPC, logger, greeterService)
-	server_HTTP := confServer.Http
-	httpServer := server.NewHTTPServer(server_HTTP, logger, greeterService)
-	rabbitmqServer := server.NewRabbitMQServer(confServer, logger, greeterService)
-	mqttServer := server.NewMQTTServer(confServer, logger, greeterService)
-	websocketServer := server.NewWebsocketServer(confServer, logger, greeterService)
-	server_TCP := confServer.Tcp
-	tcpServer := server.NewTCPServer(server_TCP, logger)
-	server_UDP := confServer.Udp
-	udpServer := server.NewUDPServer(server_UDP, logger)
-	app := newApp(logger, grpcServer, httpServer, rabbitmqServer, mqttServer, websocketServer, tcpServer, udpServer)
-	return app, func() {
-		cleanup()
-	}, nil
+	servers, err := server.NewServers(confServer, logger, greeterService)
+	if err != nil {
+		return nil, err
+	}
+	app := newApp(logger, servers)
+	return app, nil
 }

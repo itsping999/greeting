@@ -1,30 +1,34 @@
 server:
   http:
+    enabled: true
     addr: 0.0.0.0:8000
     timeout: 1s
   grpc:
+    enabled: true
     addr: 0.0.0.0:9000
     timeout: 1s
   rabbitmq:
+    enabled: false
     addr: 0.0.0.0:5672
   ws:
+    enabled: false
     addr: 0.0.0.0:8001
     path: /test
     timeout: 1s
   mqtt:
+    enabled: false
     addr: 0.0.0.0:1883
   tcp:
+    enabled: false
     addr: 0.0.0.0:9001
     timeout: 1s
   udp:
+    enabled: false
     addr: 0.0.0.0:9002
     timeout: 1s
-
-data:
-  database:
-    driver: mysql
-    source: root:root@tcp(127.0.0.1:3306)/test?parseTime=True&loc=Local
-  redis:
-    addr: 127.0.0.1:6379
-    read_timeout: 0.2s
-    write_timeout: 0.2s
+  kcp:
+    enabled: false
+    addr: 0.0.0.0:9003
+    key: "it's a secret"
+    salt: "fbe274x"
+    timeout: 1s

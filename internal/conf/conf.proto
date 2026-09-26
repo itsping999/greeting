@@ -1,44 +1,64 @@
 syntax = "proto3";
 package kratos.api;
 
-option go_package = "github.com/wyuhsin/web-template-go/internal/conf;conf";
+option go_package = "github.com/itsping999/greeting/internal/conf;conf";
 
 import "google/protobuf/duration.proto";
 
 message Bootstrap {
   Server server = 1;
-  Data data = 2;
+  reserved 2;
+  reserved "data";
 }
 
 message Server {
   message HTTP {
+    bool enabled = 10;
     string network = 1;
     string addr = 2;
     google.protobuf.Duration timeout = 3;
   }
   message GRPC {
+    bool enabled = 10;
     string network = 1;
     string addr = 2;
     google.protobuf.Duration timeout = 3;
   }
-  message RabbitMQ { string addr = 1; }
+  message RabbitMQ {
+    string addr = 1;
+    bool enabled = 10;
+  }
 
   message Websocket {
+    bool enabled = 10;
     string addr = 1;
     string path = 2;
     google.protobuf.Duration timeout = 3;
   }
 
-  message MQTT { string addr = 1; }
+  message MQTT {
+    string addr = 1;
+    bool enabled = 10;
+  }
 
   message TCP {
+    bool enabled = 10;
     string addr = 1;
     google.protobuf.Duration timeout = 2;
   }
 
   message UDP {
+    bool enabled = 10;
     string addr = 1;
     google.protobuf.Duration timeout = 2;
+  }
+
+  message KCP {
+    bool enabled = 10;
+    string addr = 1;
+    string key = 2;
+    string salt = 3;
+    google.protobuf.Duration timeout = 4;
   }
 
   HTTP http = 1;
@@ -48,19 +68,5 @@ message Server {
   MQTT mqtt = 5;
   TCP tcp = 6;
   UDP udp = 7;
-}
-
-message Data {
-  message Database {
-    string driver = 1;
-    string source = 2;
-  }
-  message Redis {
-    string network = 1;
-    string addr = 2;
-    google.protobuf.Duration read_timeout = 3;
-    google.protobuf.Duration write_timeout = 4;
-  }
-  Database database = 1;
-  Redis redis = 2;
+  KCP kcp = 8;
 }

@@ -4,36 +4,30 @@ import (
 	"context"
 
 	"github.com/go-kratos/kratos/v2/log"
-	"github.com/tx7do/kratos-transport/transport/rabbitmq"
-	"github.com/tx7do/kratos-transport/transport/websocket"
-	v1 "github.com/wyuhsin/web-template-go/api/helloworld/v1"
-	"github.com/wyuhsin/web-template-go/internal/biz"
+	v1 "github.com/itsping999/greeting/api/helloworld/v1"
+	"github.com/itsping999/greeting/internal/biz"
 )
 
-// GreeterService is a greeter service.
 type GreeterService struct {
 	v1.UnimplementedGreeterServer
-
 	log *log.Helper
 	uc  *biz.GreeterUsecase
-	ws  *websocket.Server
-	mq  *rabbitmq.Server
 }
 
-// NewGreeterService new a greeter service.
 func NewGreeterService(logger log.Logger, uc *biz.GreeterUsecase) *GreeterService {
-	l := log.NewHelper(log.With(logger, "module", "service/greeter"))
-	return &GreeterService{
-		log: l,
-		uc:  uc,
-	}
+	return &GreeterService{log: log.NewHelper(log.With(logger, "module", "service/greeter")), uc: uc}
 }
-
-// SayHello implements helloworld.GreeterServer.
 func (s *GreeterService) SayHello(ctx context.Context, in *v1.HelloRequest) (*v1.HelloReply, error) {
-	g, err := s.uc.CreateGreeter(ctx, &biz.Greeter{Hello: in.Name})
+	g, err := s.uc.CreateGreeter(ctx, &biz.Greeter{Hello: in.GetName()})
 	if err != nil {
 		return nil, err
 	}
-	return &v1.HelloReply{Message: "Hello " + g.Hello}, nil
+	return &v1.HelloReply{Message: "Hello " + g.Hello, Id: g.ID}, nil
+}
+func (s *GreeterService) GetGreeting(ctx context.Context, in *v1.GetGreetingRequest) (*v1.HelloReply, error) {
+	g, err := s.uc.GetGreeting(ctx, in.GetId())
+	if err != nil {
+		return nil, err
+	}
+	return &v1.HelloReply{Message: "Hello " + g.Hello, Id: g.ID}, nil
 }

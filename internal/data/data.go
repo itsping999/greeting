@@ -1,24 +1,23 @@
 package data
 
 import (
-	"github.com/wyuhsin/web-template-go/internal/conf"
+	"sync"
 
 	"github.com/go-kratos/kratos/v2/log"
 	"github.com/google/wire"
+	"github.com/itsping999/greeting/internal/biz"
 )
 
-// ProviderSet is data providers.
 var ProviderSet = wire.NewSet(NewData, NewGreeterRepo)
 
-// Data .
+// Data owns process-local example storage. Restarting the service clears it.
 type Data struct {
-	// TODO wrapped database client
+	mu       sync.RWMutex
+	nextID   int64
+	greeters map[int64]biz.Greeter
 }
 
-// NewData .
-func NewData(c *conf.Data, logger log.Logger) (*Data, func(), error) {
-	cleanup := func() {
-		log.NewHelper(logger).Info("closing the data resources")
-	}
-	return &Data{}, cleanup, nil
+func NewData(logger log.Logger) *Data {
+	log.NewHelper(logger).Info("using in-memory example storage; records are lost on restart")
+	return &Data{greeters: make(map[int64]biz.Greeter)}
 }

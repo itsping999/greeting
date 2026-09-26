@@ -1,121 +1,69 @@
-GOHOSTOS:=$(shell go env GOHOSTOS) 
-GOPATH:=$(shell go env GOPATH)
-VERSION=$(shell git describe --tags --always)
-API_PROTO_DIR := ./api
-CURR_DIR := $(shell pwd)
-CMD_DIR := ./cmd/server
+SHELL := /bin/sh
+TOOLS_DIR := $(CURDIR)/.tools/bin
+PROTOC ?= protoc
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+GO_LDFLAGS := -X main.Version=$(VERSION)
+API_PROTO_FILES := $(shell find api -name '*.proto' | sort)
+INTERNAL_PROTO_FILES := $(shell find internal -name '*.proto' | sort)
+export PATH := $(TOOLS_DIR):$(PATH)
 
-INTERNAL_PROTO_FILES=$(shell find internal -name *.proto)
-API_PROTO_FILES=$(shell find api -name *.proto)
-
-ARM_DOCKER_BUILD_IMAGE := docker.io/wyuhsin/go-cross-multiarch:go1.24-ubuntu16.04-20250625
-ARM_OUTPUT             := ./bin/arm/app
-
-ARM64_DOCKER_BUILD_IMAGE := docker.io/wyuhsin/go-cross-multiarch:go1.24-ubuntu16.04-20250625
-ARM64_OUTPUT             := ./bin/arm64/app
-
-AMD64_DOCKER_BUILD_IMAGE := docker.io/wyuhsin/go-cross-multiarch:go1.24-ubuntu16.04-20250625
-AMD64_OUTPUT             := ./bin/amd64/app
-
-.PHONY: init
+.PHONY: init api config generate all build run test smoke examples-smoke docker-build-linux-amd64 docker-build-linux-arm docker-build-linux-arm64
 init:
-	go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
-	go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
-	go install github.com/go-kratos/kratos/cmd/kratos/v2@latest
-	go install github.com/go-kratos/kratos/cmd/protoc-gen-go-http/v2@latest
-	go install github.com/go-kratos/kratos/cmd/protoc-gen-go-errors/v2@latest
-	go install github.com/google/gnostic/cmd/protoc-gen-openapi@latest
-	go install github.com/google/wire/cmd/wire@latest
-	go install github.com/envoyproxy/protoc-gen-validate@latest
-	go install github.com/favadi/protoc-go-inject-tag@latest
+	mkdir -p $(TOOLS_DIR)
+	GOBIN=$(TOOLS_DIR) go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.11
+	GOBIN=$(TOOLS_DIR) go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.5.1
+	GOBIN=$(TOOLS_DIR) go install github.com/go-kratos/kratos/cmd/protoc-gen-go-http/v2@v2.0.0-20260404020628-f149714c1d54
+	GOBIN=$(TOOLS_DIR) go install github.com/google/gnostic/cmd/protoc-gen-openapi@v0.7.0
+	GOBIN=$(TOOLS_DIR) go install github.com/google/wire/cmd/wire@v0.7.0
+	GOBIN=$(TOOLS_DIR) go install github.com/envoyproxy/protoc-gen-validate@v1.1.0
 
-.PHONY: config
-# generate internal proto
-config:
-	protoc --proto_path=./internal \
-		--proto_path=./third_party \
-		--go_out=paths=source_relative:./internal \
-		$(INTERNAL_PROTO_FILES)
-
-.PHONY: api
-# generate api proto
 api:
-	protoc --proto_path=$(API_PROTO_DIR) \
-	       --proto_path=./third_party \
-	       --go_out=paths=source_relative:$(API_PROTO_DIR) \
-	       --go-http_out=paths=source_relative:$(API_PROTO_DIR) \
-	       --go-grpc_out=paths=source_relative:$(API_PROTO_DIR) \
-	       --go-errors_out=paths=source_relative:$(API_PROTO_DIR) \
-	       --openapi_out=fq_schema_naming=true,default_response=false:. \
-	       --validate_out=paths=source_relative,lang=go:$(API_PROTO_DIR) \
-	       $(API_PROTO_FILES)
-
-	@find $(API_PROTO_DIR) -name '*.pb.go' -type f | while read file; do \
-		protoc-go-inject-tag -input=$$file; \
-	done
-
-
-.PHONY: build
-# build
-build:
-	# mkdir -p bin/ && go build -ldflags "-X main.Version=$(VERSION)" -o ./bin/ ./...
-	$(MAKE) docker-build-linux-amd64
-	$(MAKE) docker-build-linux-arm
-	$(MAKE) docker-build-linux-arm64
-
-.PHONY: generate
-# generate
+	$(PROTOC) --proto_path=./api --proto_path=./third_party --go_out=paths=source_relative:./api --go-http_out=paths=source_relative:./api --go-grpc_out=paths=source_relative:./api --openapi_out=fq_schema_naming=true,default_response=false:. --validate_out=paths=source_relative,lang=go:./api $(API_PROTO_FILES)
+config:
+	$(PROTOC) --proto_path=./internal --proto_path=./third_party --go_out=paths=source_relative:./internal $(INTERNAL_PROTO_FILES)
 generate:
-	go generate ./...
-	go mod tidy
-
-.PHONY: all
-# generate all
+	cd cmd/server && wire
 all:
-	make api;
-	make config;
-	make generate;
-
-.PHONY: run
+	$(MAKE) api
+	$(MAKE) config
+	$(MAKE) generate
+build:
+	mkdir -p bin
+	go build -ldflags "$(GO_LDFLAGS)" -o bin/server ./cmd/server
+	go build -o bin/client ./cmd/client
 run:
-	go run ${CMD_DIR}/...
+	go run ./cmd/server -conf ./configs/config.yaml
+test:
+	go test -race ./...
+smoke: build
+	./scripts/smoke.sh
+examples-smoke: build
+	./scripts/smoke.sh --brokers
 
-.PHONY: docker-build-linux-amd64
 docker-build-linux-amd64:
-	${CONTAINER} run --rm -it \
-                -v $(CURR_DIR):/app \
-                -v $$HOME/go/pkg/mod:/go/pkg/mod \
-                -w /app \
-                -e GOOS=linux \
-                -e GOARCH=amd64 \
-                -e CGO_ENABLED=1 \
-                $(AMD64_DOCKER_BUILD_IMAGE) \
-                go build -v -buildvcs=false -o ${AMD64_OUTPUT} ${CMD_DIR}
-
-.PHONY: docker-build-linux-arm
+	mkdir -p bin/amd64
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "$(GO_LDFLAGS)" -o bin/amd64/app ./cmd/server
 docker-build-linux-arm:
-	${CONTAINER} run --rm -it \
-                -v $(CURR_DIR):/app \
-                -v $$HOME/go/pkg/mod:/go/pkg/mod \
-                -w /app \
-                -e GOOS=linux\
-                -e GOARCH=arm \
-                -e CGO_ENABLED=1 \
-                -e CC=/opt/gcc-linaro-5.3.1-2016.05-x86_64_arm-linux-gnueabi/bin/arm-linux-gnueabi-gcc \
-                -e CXX=/opt/gcc-linaro-5.3.1-2016.05-x86_64_arm-linux-gnueabi/bin/arm-linux-gnueabi-gcc \
-                $(ARM_DOCKER_BUILD_IMAGE) \
-                go build -v -buildvcs=false -o ${ARM_OUTPUT} ${CMD_DIR}
-
-.PHONY: docker-build-linux-arm64
+	mkdir -p bin/arm
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=7 go build -ldflags "$(GO_LDFLAGS)" -o bin/arm/app ./cmd/server
 docker-build-linux-arm64:
-	${CONTAINER} run --rm -it \
-                -v $(CURR_DIR):/app \
-                -v $$HOME/go/pkg/mod:/go/pkg/mod \
-                -w /app \
-                -e GOOS=linux \
-                -e GOARCH=arm64 \
-                -e CGO_ENABLED=1 \
-                -e CC=/opt/gcc-linaro-7.4.1-2019.02-x86_64_aarch64-linux-gnu/bin/aarch64-linux-gnu-gcc \
-                -e CXX=/opt/gcc-linaro-7.4.1-2019.02-x86_64_aarch64-linux-gnu/bin/aarch64-linux-gnu-g++ \
-                $(ARM64_DOCKER_BUILD_IMAGE) \
-                go build -v -buildvcs=false -o ${ARM64_OUTPUT} ${CMD_DIR}
+	mkdir -p bin/arm64
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags "$(GO_LDFLAGS)" -o bin/arm64/app ./cmd/server
+
+.PHONY: doctor task fmt fmt-check check-generated check
+doctor:
+	python3 scripts/dev.py doctor
+task:
+	python3 scripts/dev.py task --name "$(NAME)"
+fmt:
+	python3 scripts/dev.py fmt
+fmt-check:
+	python3 scripts/dev.py fmt-check
+check-generated:
+	python3 scripts/dev.py check-generated
+check:
+	$(MAKE) fmt-check
+	go vet ./...
+	$(MAKE) test
+	$(MAKE) check-generated
+	$(MAKE) build

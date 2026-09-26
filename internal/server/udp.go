@@ -2,59 +2,77 @@ package server
 
 import (
 	"context"
-	"net"
-
+	"errors"
 	"github.com/go-kratos/kratos/v2/log"
-	"github.com/go-kratos/kratos/v2/transport"
-	"github.com/wyuhsin/web-template-go/internal/conf"
-)
-
-var (
-	_ transport.Server = (*UDPServer)(nil)
+	"github.com/itsping999/greeting/internal/conf"
+	"net"
+	"sync"
+	"time"
 )
 
 type UDPServer struct {
-	conn *net.UDPConn
-	log  *log.Helper
-	c    *conf.Server_UDP
+	mu      sync.Mutex
+	conn    *net.UDPConn
+	stopped bool
+	c       *conf.Server_UDP
+	log     *log.Helper
 }
 
 func NewUDPServer(c *conf.Server_UDP, logger log.Logger) *UDPServer {
-	srv := &UDPServer{
-		log: log.NewHelper(logger),
-		c:   c,
-	}
-	return srv
+	return &UDPServer{c: c, log: log.NewHelper(logger)}
 }
-
 func (s *UDPServer) Start(ctx context.Context) error {
+	s.mu.Lock()
+	if s.stopped {
+		s.mu.Unlock()
+		return nil
+	}
 	addr, err := net.ResolveUDPAddr("udp", s.c.Addr)
 	if err != nil {
+		s.mu.Unlock()
 		return err
 	}
 	conn, err := net.ListenUDP("udp", addr)
 	if err != nil {
+		s.mu.Unlock()
 		return err
 	}
 	s.conn = conn
-	s.log.Infof("[UDP] server listening on: %s", s.conn.LocalAddr().String())
-
-	go func() {
-		buf := make([]byte, 1024)
-		for {
-			n, remoteAddr, err := s.conn.ReadFromUDP(buf)
-			if err != nil {
-				s.log.Error(err)
-				return
+	s.mu.Unlock()
+	s.log.Infof("[UDP] listening on %s", conn.LocalAddr())
+	buf := make([]byte, 65535)
+	timeout := conf.Timeout(s.c.Timeout)
+	for {
+		conn.SetReadDeadline(time.Now().Add(timeout))
+		n, remote, err := conn.ReadFromUDP(buf)
+		if err != nil {
+			if errors.Is(err, net.ErrClosed) {
+				return nil
 			}
-			s.log.Infof("[UDP] received: %s from %s", string(buf[:n]), remoteAddr.String())
-			s.conn.WriteToUDP(buf[:n], remoteAddr)
+			if ne, ok := err.(net.Error); ok && ne.Timeout() {
+				continue
+			}
+			return err
 		}
-	}()
-	return nil
+		conn.SetWriteDeadline(time.Now().Add(timeout))
+		if _, err := conn.WriteToUDP(buf[:n], remote); err != nil {
+			if errors.Is(err, net.ErrClosed) {
+				return nil
+			}
+			return err
+		}
+	}
 }
-
-func (s *UDPServer) Stop(ctx context.Context) error {
-	s.log.Info("[UDP] server stopping")
-	return s.conn.Close()
+func (s *UDPServer) Stop(context.Context) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.stopped = true
+	if s.conn == nil {
+		return nil
+	}
+	err := s.conn.Close()
+	if errors.Is(err, net.ErrClosed) {
+		return nil
+	}
+	return err
 }

@@ -1,0 +1,10 @@
+# Default image configuration: HTTP/gRPC and in-memory storage only.
+server:
+  http:
+    enabled: true
+    addr: 0.0.0.0:8000
+    timeout: 5s
+  grpc:
+    enabled: true
+    addr: 0.0.0.0:9000
+    timeout: 5s

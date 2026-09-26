@@ -1,28 +1,18 @@
 package service
 
 import (
-	"net/url"
-
-	"github.com/tx7do/kratos-transport/transport/websocket"
+	"context"
+	v1 "github.com/itsping999/greeting/api/helloworld/v1"
+	"github.com/itsping999/greeting/internal/protocol"
 )
 
-func (s *GreeterService) SetWebsocketServer(ws *websocket.Server) {
-	s.ws = ws
-}
-
-func (s *GreeterService) OnWebsocketConnect(
-	sessionId websocket.SessionID,
-	queries url.Values,
-	register bool,
-) {
-	if register {
-		s.log.Infof("%s connected\n", sessionId)
-	} else {
-		s.log.Infof("%s disconnect\n", sessionId)
+func (s *GreeterService) OnChatMessage(ctx context.Context, in protocol.ChatMessage) protocol.ChatMessage {
+	if in.Type != 1 {
+		return protocol.ChatMessage{Type: in.Type, Error: "unsupported message type"}
 	}
-}
-
-func (s *GreeterService) OnChatMessage(sessionId websocket.SessionID, msg any) error {
-	s.ws.Broadcast(websocket.MessageType(1), msg)
-	return nil
+	out, err := s.SayHello(ctx, &v1.HelloRequest{Name: in.Name})
+	if err != nil {
+		return protocol.ChatMessage{Type: 1, Error: "name must contain 1 to 256 characters"}
+	}
+	return protocol.ChatMessage{Type: 1, Message: out.Message}
 }

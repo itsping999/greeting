@@ -1,8 +1,8 @@
 package data
 
-import "github.com/wyuhsin/web-template-go/internal/pkg/dbx"
-import "github.com/wyuhsin/web-template-go/internal/pkg/discoveryx"
-import "github.com/wyuhsin/web-template-go/internal/pkg/grpcx"
+import "github.com/itsping999/greeting/internal/pkg/dbx"
+import "github.com/itsping999/greeting/internal/pkg/discoveryx"
+import "github.com/itsping999/greeting/internal/pkg/grpcx"
 
 type Config struct {
 	Discovery  discoveryx.Config  `json:"discovery" yaml:"discovery"`

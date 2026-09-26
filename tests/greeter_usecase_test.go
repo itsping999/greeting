@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/go-kratos/kratos/v2/log"
-	"github.com/wyuhsin/web-template-go/internal/biz"
+	"github.com/itsping999/greeting/internal/biz"
 )
 
 type mockGreeterRepo struct {
@@ -97,4 +97,8 @@ func TestCreateGreeterPublishFailureDoesNotBreakMainFlow(t *testing.T) {
 	if !pub.called {
 		t.Fatalf("expected publisher to be called")
 	}
+}
+
+func (m *mockGreeterRepo) FindByID(context.Context, int64) (*biz.Greeter, error) {
+	return nil, biz.ErrGreetingNotFound
 }

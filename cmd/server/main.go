@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"fmt"
 	"github.com/go-kratos/kratos/v2"
 	"github.com/go-kratos/kratos/v2/log"
 	"github.com/go-kratos/kratos/v2/middleware/tracing"
@@ -12,13 +13,11 @@ import (
 	"github.com/go-kratos/kratos/v2/transport"
 	grpcTransport "github.com/go-kratos/kratos/v2/transport/grpc"
 	httpTransport "github.com/go-kratos/kratos/v2/transport/http"
-	"github.com/tx7do/kratos-transport/transport/mqtt"
-	"github.com/tx7do/kratos-transport/transport/rabbitmq"
-	"github.com/tx7do/kratos-transport/transport/websocket"
-	"github.com/wyuhsin/web-template-go/internal/conf"
-	"github.com/wyuhsin/web-template-go/internal/pkg/logx"
-	"github.com/wyuhsin/web-template-go/internal/pkg/metricsx"
-	"github.com/wyuhsin/web-template-go/internal/pkg/tracingx"
+	"github.com/itsping999/greeting/internal/conf"
+	"github.com/itsping999/greeting/internal/pkg/logx"
+	"github.com/itsping999/greeting/internal/pkg/metricsx"
+	"github.com/itsping999/greeting/internal/pkg/tracingx"
+	"github.com/itsping999/greeting/internal/server"
 	"gopkg.in/yaml.v3"
 
 	_ "go.uber.org/automaxprocs"
@@ -27,16 +26,16 @@ import (
 // go build -ldflags "-X main.Version=x.y.z"
 var (
 	// Name is the name of the compiled software.
-	Name string
+	Name = "greeting"
 	// Version is the version of the compiled software.
-	Version string
+	Version = "dev"
 	// flagconf is the config flag.
 	flagconf string
 	id, _    = os.Hostname()
 )
 
 func init() {
-	flag.StringVar(&flagconf, "conf", "./configs", "config path, eg: -conf config.yaml")
+	flag.StringVar(&flagconf, "conf", "./configs/config.yaml", "config path, eg: -conf config.yaml")
 }
 
 func newApp(
@@ -44,9 +43,10 @@ func newApp(
 	registrar registry.Registrar,
 	gs *grpcTransport.Server,
 	hs *httpTransport.Server,
-	ws *websocket.Server,
-	ms *mqtt.Server,
-	rs *rabbitmq.Server,
+	ws *server.WebsocketServer,
+	ms *server.BrokerServer,
+	rs *server.RabbitMQServer,
+	ts *server.TCPServer, us *server.UDPServer, ks *server.KCPServer,
 ) *kratos.App {
 	servers := make([]transport.Server, 0, 5)
 	if gs != nil {
@@ -65,6 +65,15 @@ func newApp(
 		servers = append(servers, rs)
 	}
 
+	if ts != nil {
+		servers = append(servers, ts)
+	}
+	if us != nil {
+		servers = append(servers, us)
+	}
+	if ks != nil {
+		servers = append(servers, ks)
+	}
 	opts := []kratos.Option{
 		kratos.ID(id),
 		kratos.Name(Name),
@@ -79,14 +88,18 @@ func newApp(
 	return kratos.New(opts...)
 }
 
-func main() {
-	flag.Parse()
+func run() error {
 
 	var bc conf.Bootstrap
 	if err := loadBootstrap(flagconf, &bc); err != nil {
-		panic(err)
+		return err
 	}
-	applyEnvOverrides(&bc)
+	if err := applyEnvOverrides(&bc); err != nil {
+		return err
+	}
+	if err := server.Validate(&bc.Server); err != nil {
+		return err
+	}
 
 	baseLogger := logx.NewWithOptions(bc.Logger)
 	logger := log.With(
@@ -100,24 +113,33 @@ func main() {
 
 	tracingCleanup, err := tracingx.Init(&bc.Tracing, Name, Version, logger)
 	if err != nil {
-		panic(err)
+		return err
 	}
 	defer tracingCleanup()
 	metricsCleanup, err := metricsx.Init(logger)
 	if err != nil {
-		panic(err)
+		return err
 	}
 	defer metricsCleanup()
 
 	app, cleanup, err := wireApp(&bc.Server, &bc.Data, &bc.Tracing, logger)
 	if err != nil {
-		panic(err)
+		return err
 	}
 	defer cleanup()
 
 	// start and wait for stop signal
 	if err := app.Run(); err != nil {
-		panic(err)
+		return err
+	}
+	return nil
+}
+
+func main() {
+	flag.Parse()
+	if err := run(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
 	}
 }
 

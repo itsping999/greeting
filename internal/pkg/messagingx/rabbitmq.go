@@ -9,7 +9,6 @@ import (
 	"github.com/go-kratos/kratos/v2/log"
 	"github.com/tx7do/kratos-transport/broker"
 	brokerRabbitMQ "github.com/tx7do/kratos-transport/broker/rabbitmq"
-	"github.com/wyuhsin/web-template-go/internal/server"
 )
 
 type RabbitMQPublisher struct {
@@ -19,7 +18,7 @@ type RabbitMQPublisher struct {
 	logger  *log.Helper
 }
 
-func NewRabbitMQPublisher(cfg server.RabbitMQConfig, logger log.Logger) (*RabbitMQPublisher, func(), error) {
+func NewRabbitMQPublisher(cfg RabbitMQConfig, logger log.Logger) (*RabbitMQPublisher, func(), error) {
 	helper := log.NewHelper(log.With(logger, "module", "messagingx/rabbitmq"))
 	if !cfg.Enabled {
 		helper.Info("rabbitmq publisher disabled, skip initialization")

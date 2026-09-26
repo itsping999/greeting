@@ -1,40 +1,10 @@
+# Defaults: HTTP/gRPC, in-memory repository; optional infrastructure disabled.
 server:
   http:
     enabled: true
     addr: 0.0.0.0:8000
-    timeout: 1s
+    timeout: 5s
   grpc:
     enabled: true
     addr: 0.0.0.0:9000
-    timeout: 1s
-  middleware:
-    ratelimit_enabled: false
-  websocket:
-    enabled: false
-  mqtt:
-    enabled: false
-  rabbitmq:
-    enabled: false
-
-data:
-  # Kubernetes discovery can be enabled in cluster.
-  discovery:
-    kubernetes:
-      enabled: false
-  # Keep databases disabled by default for quick start.
-  postgres:
-    enabled: false
-  redis:
-    enabled: false
-  mongodb:
-    enabled: false
-  remote_grpc:
-    greeter:
-      enabled: false
-      circuitbreaker_enabled: false
-
-tracing:
-  enabled: false
-
-logger:
-  level: info
+    timeout: 5s

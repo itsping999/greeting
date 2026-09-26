@@ -4,8 +4,8 @@ import (
 	"context"
 
 	"github.com/go-kratos/kratos/v2/log"
-	"github.com/wyuhsin/web-template-go/internal/biz"
-	"github.com/wyuhsin/web-template-go/internal/pkg/messagingx"
+	"github.com/itsping999/greeting/internal/biz"
+	"github.com/itsping999/greeting/internal/pkg/messagingx"
 )
 
 const (

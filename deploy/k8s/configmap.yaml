@@ -1,9 +1,9 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: web-template-go-config
+  name: greeting-config
   labels:
-    app.kubernetes.io/name: web-template-go
+    app.kubernetes.io/name: greeting
     app.kubernetes.io/component: api
 data:
   APP_SERVER_HTTP_ENABLED: "true"

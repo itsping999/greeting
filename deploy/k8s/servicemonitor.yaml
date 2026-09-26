@@ -2,14 +2,14 @@
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
-  name: web-template-go
+  name: greeting
   labels:
-    app.kubernetes.io/name: web-template-go
+    app.kubernetes.io/name: greeting
     app.kubernetes.io/component: api
 spec:
   selector:
     matchLabels:
-      app.kubernetes.io/name: web-template-go
+      app.kubernetes.io/name: greeting
       app.kubernetes.io/component: api
   endpoints:
     - port: http

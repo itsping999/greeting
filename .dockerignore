@@ -1,14 +1,5 @@
 .git
-.gitignore
-.dockerignore
-.codex
-
 bin
-dist
-coverage.out
-*.test
-
-.DS_Store
+.tools
+configs/config.yaml
 *.log
-tmp
-*.tmp

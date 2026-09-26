@@ -336,7 +336,7 @@ func TestRunProtoCRUD(t *testing.T) {
 		"rpc ListOrders",
 		"rpc UpdateOrder",
 		"rpc DeleteOrder",
-		"message Order {",
+		"message OrderRecord {",
 		"google.protobuf.Timestamp created_at",
 	} {
 		if !strings.Contains(protoStr, want) {
@@ -657,16 +657,18 @@ func TestRewriteProtoAsCRUD(t *testing.T) {
 	for _, want := range []string{
 		"package orders.v1;",
 		"service Orders {",
-		"rpc CreateOrder(CreateOrderRequest) returns (Order);",
-		"rpc GetOrder(GetOrderRequest) returns (Order);",
-		"rpc ListOrders(ListOrdersRequest) returns (ListOrdersResponse);",
-		"rpc UpdateOrder(UpdateOrderRequest) returns (Order);",
-		"rpc DeleteOrder(DeleteOrderRequest) returns (google.protobuf.Empty);",
-		"message Order {",
+		"rpc CreateOrder(CreateOrderRequest) returns (OrderRecord)",
+		"rpc GetOrder(GetOrderRequest) returns (OrderRecord)",
+		"rpc ListOrders(ListOrdersRequest) returns (ListOrdersResponse)",
+		"rpc UpdateOrder(UpdateOrderRequest) returns (OrderRecord)",
+		"rpc DeleteOrder(DeleteOrderRequest) returns (google.protobuf.Empty)",
+		"message OrderRecord {",
 		"string id = 1;",
 		"google.protobuf.Timestamp created_at = 20;",
 		"message ListOrdersResponse {",
-		"repeated Order items = 1;",
+		"repeated OrderRecord items = 1;",
+		`post: "/orders" body: "*"`,
+		`get: "/orders/{id}"`,
 	} {
 		if !strings.Contains(str, want) {
 			t.Fatalf("CRUD proto missing %q:\n%s", want, str)
@@ -762,4 +764,26 @@ option go_package = "github.com/example/app/orders/v1;v1";
 		return os.WriteFile(servicePath, []byte("package service\n"), 0o644)
 	}
 	return nil
+}
+
+func TestProviderUpdateDoesNotModifyOtherFunctionCalls(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "data.go")
+	source := `package data
+import "github.com/google/wire"
+var ProviderSet=wire.NewSet(NewData)
+func NewData() map[int]int { return make(map[int]int) }
+`
+	if err := os.WriteFile(path, []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := updateProviderSet(path, "NewOrderRepo"); err != nil {
+		t.Fatal(err)
+	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(content), "wire.NewSet(NewData, NewOrderRepo)") || !strings.Contains(string(content), "make(map[int]int)") {
+		t.Fatalf("provider update modified unrelated calls: %s", content)
+	}
 }

@@ -5,7 +5,7 @@ package helloworld.v1;
 import "google/api/annotations.proto";
 import "validate/validate.proto";
 
-option go_package = "github.com/wyuhsin/web-template-go/api/helloworld/v1;v1";
+option go_package = "github.com/itsping999/greeting/api/helloworld/v1;v1";
 
 // The greeting service definition.
 service Greeter {
@@ -15,13 +15,22 @@ service Greeter {
       get : "/helloworld/{name}"
     };
   }
+  rpc GetGreeting(GetGreetingRequest) returns (HelloReply) {
+    option (google.api.http) = { get: "/greetings/{id}" };
+  }
 }
 
 // The request message containing the user's name.
 message HelloRequest {
-  // @gotags: json:"name"
   string name = 1 [ (validate.rules).string.min_len = 1 ];
 }
 
 // The response message containing the greetings
-message HelloReply { string message = 1; }
+message HelloReply {
+  string message = 1;
+  int64 id = 2;
+}
+
+message GetGreetingRequest {
+  int64 id = 1 [(validate.rules).int64.gt = 0];
+}

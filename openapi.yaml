@@ -7,6 +7,24 @@ info:
     description: The greeting service definition.
     version: 0.0.1
 paths:
+    /greetings/{id}:
+        get:
+            tags:
+                - Greeter
+            operationId: Greeter_GetGreeting
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/helloworld.v1.HelloReply'
     /helloworld/{name}:
         get:
             tags:
@@ -16,7 +34,6 @@ paths:
             parameters:
                 - name: name
                   in: path
-                  description: '@gotags: json:"name"'
                   required: true
                   schema:
                     type: string
@@ -33,6 +50,8 @@ components:
             type: object
             properties:
                 message:
+                    type: string
+                id:
                     type: string
             description: The response message containing the greetings
 tags:

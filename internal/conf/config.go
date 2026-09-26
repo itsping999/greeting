@@ -1,10 +1,10 @@
 package conf
 
 import (
-	"github.com/wyuhsin/web-template-go/internal/data"
-	"github.com/wyuhsin/web-template-go/internal/pkg/logx"
-	"github.com/wyuhsin/web-template-go/internal/pkg/tracingx"
-	"github.com/wyuhsin/web-template-go/internal/server"
+	"github.com/itsping999/greeting/internal/data"
+	"github.com/itsping999/greeting/internal/pkg/logx"
+	"github.com/itsping999/greeting/internal/pkg/tracingx"
+	"github.com/itsping999/greeting/internal/server"
 )
 
 type Bootstrap struct {

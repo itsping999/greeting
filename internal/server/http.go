@@ -5,10 +5,10 @@ import (
 	"time"
 
 	"github.com/go-kratos/kratos/v2/log"
-	"github.com/wyuhsin/web-template-go/api/helloworld/v1"
-	"github.com/wyuhsin/web-template-go/internal/pkg/metricsx"
-	"github.com/wyuhsin/web-template-go/internal/pkg/tracingx"
-	"github.com/wyuhsin/web-template-go/internal/service"
+	"github.com/itsping999/greeting/api/helloworld/v1"
+	"github.com/itsping999/greeting/internal/pkg/metricsx"
+	"github.com/itsping999/greeting/internal/pkg/tracingx"
+	"github.com/itsping999/greeting/internal/service"
 
 	"github.com/go-kratos/kratos/v2/transport/http"
 )
@@ -29,6 +29,22 @@ func NewHTTPServer(
 	greeter *service.GreeterService,
 	system *service.SystemService,
 ) *http.Server {
+	if c == nil || !c.Enabled {
+		return nil
+	}
+	srv := newHTTPServer(c, middlewareCfg, tracingCfg, logger, system)
+	v1.RegisterGreeterHTTPServer(srv, greeter)
+	return srv
+}
+
+// newHTTPServer builds shared transport routes independently of business services.
+func newHTTPServer(
+	c *HTTPConfig,
+	middlewareCfg *MiddlewareConfig,
+	tracingCfg *tracingx.Config,
+	logger log.Logger,
+	system *service.SystemService,
+) *http.Server {
 	helper := log.NewHelper(log.With(logger, "module", "server/http"))
 	if c == nil || !c.Enabled {
 		helper.Info("http server disabled, skip initialization")
@@ -47,7 +63,6 @@ func NewHTTPServer(
 		opts = append(opts, http.Timeout(c.Timeout))
 	}
 	srv := http.NewServer(opts...)
-	v1.RegisterGreeterHTTPServer(srv, greeter)
 	r := srv.Route("/")
 	r.GET("/healthz", func(ctx http.Context) error {
 		return ctx.Result(200, system.Liveness())

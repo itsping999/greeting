@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"github.com/go-kratos/kratos/v2/log"
-	"github.com/wyuhsin/web-template-go/internal/pkg/messagingx"
-	"github.com/wyuhsin/web-template-go/internal/server"
+	"github.com/itsping999/greeting/internal/pkg/messagingx"
+	"github.com/itsping999/greeting/internal/server"
 )
 
 func TestNewRabbitMQPublisherDisabled(t *testing.T) {

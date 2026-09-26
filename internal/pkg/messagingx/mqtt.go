@@ -8,7 +8,6 @@ import (
 	"github.com/go-kratos/kratos/v2/log"
 	"github.com/tx7do/kratos-transport/broker"
 	brokerMQTT "github.com/tx7do/kratos-transport/broker/mqtt"
-	"github.com/wyuhsin/web-template-go/internal/server"
 )
 
 type MQTTPublisher struct {
@@ -16,7 +15,7 @@ type MQTTPublisher struct {
 	logger *log.Helper
 }
 
-func NewMQTTPublisher(cfg server.MQTTConfig, logger log.Logger) (*MQTTPublisher, func(), error) {
+func NewMQTTPublisher(cfg MQTTConfig, logger log.Logger) (*MQTTPublisher, func(), error) {
 	helper := log.NewHelper(log.With(logger, "module", "messagingx/mqtt"))
 	if !cfg.Enabled {
 		helper.Info("mqtt publisher disabled, skip initialization")

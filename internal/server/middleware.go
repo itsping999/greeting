@@ -1,8 +1,8 @@
 package server
 
 import (
-	"github.com/wyuhsin/web-template-go/internal/pkg/metricsx"
-	"github.com/wyuhsin/web-template-go/internal/pkg/tracingx"
+	"github.com/itsping999/greeting/internal/pkg/metricsx"
+	"github.com/itsping999/greeting/internal/pkg/tracingx"
 
 	validateV2 "github.com/go-kratos/kratos/contrib/middleware/validate/v2"
 	"github.com/go-kratos/kratos/v2/log"

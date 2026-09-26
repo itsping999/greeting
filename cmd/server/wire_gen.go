@@ -9,15 +9,15 @@ package main
 import (
 	"github.com/go-kratos/kratos/v2"
 	"github.com/go-kratos/kratos/v2/log"
-	"github.com/wyuhsin/web-template-go/internal/biz"
-	"github.com/wyuhsin/web-template-go/internal/data"
-	"github.com/wyuhsin/web-template-go/internal/pkg/dbx"
-	"github.com/wyuhsin/web-template-go/internal/pkg/discoveryx"
-	"github.com/wyuhsin/web-template-go/internal/pkg/grpcx"
-	"github.com/wyuhsin/web-template-go/internal/pkg/messagingx"
-	"github.com/wyuhsin/web-template-go/internal/pkg/tracingx"
-	"github.com/wyuhsin/web-template-go/internal/server"
-	"github.com/wyuhsin/web-template-go/internal/service"
+	"github.com/itsping999/greeting/internal/biz"
+	"github.com/itsping999/greeting/internal/data"
+	"github.com/itsping999/greeting/internal/pkg/dbx"
+	"github.com/itsping999/greeting/internal/pkg/discoveryx"
+	"github.com/itsping999/greeting/internal/pkg/grpcx"
+	"github.com/itsping999/greeting/internal/pkg/messagingx"
+	"github.com/itsping999/greeting/internal/pkg/tracingx"
+	"github.com/itsping999/greeting/internal/server"
+	"github.com/itsping999/greeting/internal/service"
 )
 
 import (
@@ -35,13 +35,14 @@ func wireApp(config *server.Config, dataConfig *data.Config, tracingxConfig *tra
 	}
 	grpcConfig := &config.GRPC
 	middlewareConfig := &config.Middleware
+	dataData := data.NewData(logger)
 	grpcxConfig := dataConfig.RemoteGRPC
 	greeterClient, cleanup2, err := grpcx.NewGreeterClient(grpcxConfig, logger)
 	if err != nil {
 		cleanup()
 		return nil, nil, err
 	}
-	greeterRepo := data.NewGreeterRepo(greeterClient, logger)
+	greeterRepo := data.NewGreeterRepo(dataData, greeterClient)
 	rabbitMQConfig := config.RabbitMQ
 	rabbitMQPublisher, cleanup3, err := messagingx.NewRabbitMQPublisher(rabbitMQConfig, logger)
 	if err != nil {
@@ -94,11 +95,17 @@ func wireApp(config *server.Config, dataConfig *data.Config, tracingxConfig *tra
 	httpServer := server.NewHTTPServer(httpConfig, middlewareConfig, tracingxConfig, logger, greeterService, systemService)
 	webSocketConfig := &config.WebSocket
 	websocketServer := server.NewWebsocketServer(webSocketConfig, logger, greeterService)
-	mqttConfig := &config.MQTT
-	mqttServer := server.NewMQTTServer(mqttConfig, logger)
-	serverRabbitMQConfig := &config.RabbitMQ
-	rabbitmqServer := server.NewRabbitMQServer(serverRabbitMQConfig, logger, greeterService)
-	app := newApp(logger, registrar, grpcServer, httpServer, websocketServer, mqttServer, rabbitmqServer)
+	v := &config.MQTT
+	brokerServer := server.NewMQTTServer(v, logger, greeterService)
+	v2 := &config.RabbitMQ
+	rabbitMQServer := server.NewRabbitMQServer(v2, logger, greeterService)
+	tcpConfig := &config.TCP
+	tcpServer := server.NewTCPServer(tcpConfig, logger)
+	udpConfig := &config.UDP
+	udpServer := server.NewUDPServer(udpConfig, logger)
+	kcpConfig := &config.KCP
+	kcpServer := server.NewKCPServer(kcpConfig, logger)
+	app := newApp(logger, registrar, grpcServer, httpServer, websocketServer, brokerServer, rabbitMQServer, tcpServer, udpServer, kcpServer)
 	return app, func() {
 		cleanup7()
 		cleanup6()

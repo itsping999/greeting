@@ -6,9 +6,9 @@ import (
 	"testing"
 
 	"github.com/go-kratos/kratos/v2/log"
-	v1 "github.com/wyuhsin/web-template-go/api/helloworld/v1"
-	"github.com/wyuhsin/web-template-go/internal/biz"
-	"github.com/wyuhsin/web-template-go/internal/service"
+	v1 "github.com/itsping999/greeting/api/helloworld/v1"
+	"github.com/itsping999/greeting/internal/biz"
+	"github.com/itsping999/greeting/internal/service"
 )
 
 func TestGreeterServiceSayHelloMapsTransportToUsecase(t *testing.T) {

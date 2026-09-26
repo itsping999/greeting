@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/wyuhsin/web-template-go/internal/scaffold"
+	"github.com/itsping999/greeting/internal/scaffold"
 )
 
 func main() {

@@ -1,0 +1,25 @@
+services:
+  greeting:
+    profiles: [app]
+    build: .
+    ports:
+      - "127.0.0.1:8000:8000"
+      - "127.0.0.1:9000:9000"
+  mqtt:
+    profiles: [examples]
+    image: eclipse-mosquitto:2
+    ports:
+      - "127.0.0.1:${GREETING_MQTT_PORT:-1883}:1883"
+    volumes:
+      - ./examples/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+  rabbitmq:
+    profiles: [examples]
+    image: rabbitmq:4-management
+    ports:
+      - "127.0.0.1:${GREETING_RABBITMQ_PORT:-5672}:5672"
+      - "127.0.0.1:${GREETING_RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 12

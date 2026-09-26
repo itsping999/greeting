@@ -1,15 +1,15 @@
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: web-template-go
+  name: greeting
   labels:
-    app.kubernetes.io/name: web-template-go
+    app.kubernetes.io/name: greeting
     app.kubernetes.io/component: api
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: web-template-go
+    name: greeting
   minReplicas: 2
   maxReplicas: 5
   metrics:

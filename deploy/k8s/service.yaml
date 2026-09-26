@@ -1,14 +1,14 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: web-template-go
+  name: greeting
   labels:
-    app.kubernetes.io/name: web-template-go
+    app.kubernetes.io/name: greeting
     app.kubernetes.io/component: api
 spec:
   type: ClusterIP
   selector:
-    app.kubernetes.io/name: web-template-go
+    app.kubernetes.io/name: greeting
     app.kubernetes.io/component: api
   ports:
     - name: http

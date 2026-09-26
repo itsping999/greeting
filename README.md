@@ -1,257 +1,190 @@
-# Web Template Go
+# greeting
 
-云原生微服务模板（Kratos）。
+基于 Kratos 的 Go 服务示例，覆盖 HTTP、gRPC、WebSocket、MQTT、RabbitMQ、TCP、UDP 和 KCP。默认只启动 HTTP/gRPC，不需要数据库、Redis 或消息中间件。
 
-## 技术栈
+Go module：`github.com/itsping999/greeting`。
 
-- 服务协议：HTTP + gRPC
-- ORM：GORM
-- 关系型数据库：PostgreSQL
-- 文档数据库：MongoDB
-- 缓存：Redis
-- 服务发现：Kubernetes
-- 可观测：OpenTelemetry (OTLP)
+## Agent 开发入口
 
-## 项目结构
+让 Agent 从 [AGENTS.md](AGENTS.md) 开始；业务改动地图和验收流程见 [开发指南](docs/development.md)。它们适用于不同 Agent，应用不依赖 AI 平台。
 
-- `cmd/server`：服务启动入口
-- `internal/server`：传输层（HTTP/gRPC）
-- `internal/service`：应用服务层
-- `internal/biz`：业务用例层
-- `internal/data`：数据访问层
-- `internal/pkg/*`：基础设施组件
-- `configs/config.yaml`：默认配置
-- `tests`：统一测试目录
+```bash
+make doctor                    # 检查本机工具
+make task NAME=order-create     # 创建需求、契约、验收及交接任务单
+# 按业务分层实现；proto / Wire 变更后 make all
+make fmt
+make check                     # 格式、vet、race、生成一致性、构建
+```
+
+`make check` 的生成检查需要 protoc 和 `make init` 安装的工具；在临时副本生成，不改动当前工作区。协议或启动行为变化再运行 `make smoke`。任务单记录真实验证结果与未完成事项，便于 Agent 接续工作。
 
 ## 快速开始
 
-### 1. 安装工具
-
-本地首次运行至少需要：
-
-- Go 1.24.x（项目 `go.mod` 声明 `go 1.24.0`）
-- `protoc`（Protocol Buffers compiler）
-- Kratos/protobuf/Wire 相关 Go 代码生成器
-
-`protoc` 需要通过系统包管理器安装，例如：
+需要 Go 1.27.1 或更高版本。生成代码已包含在仓库里，首次运行无需安装 protoc 或生成器。
 
 ```bash
-# macOS
-brew install protobuf
-
-# Ubuntu/Debian
-sudo apt-get update && sudo apt-get install -y protobuf-compiler
+git clone git@github.com:itsping999/greeting.git
+cd greeting
+make build
+./bin/server -conf ./configs/config.yaml
 ```
 
-Go 代码生成器使用 `go install` 安装：
+另开终端验证 HTTP 和 gRPC：
 
 ```bash
-go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.11
-go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.6.1
-go install github.com/go-kratos/kratos/cmd/kratos/v2@v2.0.0-20260228034312-fe9258d38fd4
-go install github.com/go-kratos/kratos/cmd/protoc-gen-go-http/v2@v2.0.0-20260228034312-fe9258d38fd4
-go install github.com/go-kratos/kratos/cmd/protoc-gen-go-errors/v2@v2.0.0-20260228034312-fe9258d38fd4
-go install github.com/google/gnostic/cmd/protoc-gen-openapi@v0.7.1
-go install github.com/google/wire/cmd/wire@v0.7.0
-go install github.com/envoyproxy/protoc-gen-validate@v1.3.3
-go install github.com/favadi/protoc-go-inject-tag@v1.4.0
+./bin/client -protocol http
+./bin/client -protocol grpc
+curl -fsS http://127.0.0.1:8000/healthz
 ```
 
-也可以直接运行：
+客户端会调用问候接口，再按返回 ID 查询同一条记录。输出包含 `Hello World` 和 `saved and retrieved id=...`。`/healthz` 返回 `{"status":"ok"}`，表示 HTTP 入口存活。
+
+`make run` 可直接运行源码。使用 Ctrl+C 或 SIGTERM 退出；服务停止接收连接，并关闭已建立的 WebSocket、TCP 和 KCP 连接。
+
+配置中每个协议都有 `enabled` 开关。只校验、组装和启动启用的协议；至少需要启用一种。`-conf` 默认指向一个文件，避免把基础配置、容器配置和全协议示例配置一起加载。
+
+## 问候与数据示例
+
+| HTTP 接口 | 行为 |
+|---|---|
+| `GET /helloworld/{name}` | 生成问候，并在进程内保存记录；保留原示例路由 |
+| `GET /greetings/{id}` | 查询已保存记录 |
+| `GET /healthz` | HTTP 存活检查 |
+
+```bash
+curl -fsS http://127.0.0.1:8000/helloworld/World
+# {"message":"Hello World","id":"1"}
+curl -fsS http://127.0.0.1:8000/greetings/1
+# 返回同一条问候
+```
+
+ID 是 protobuf `int64`，在 HTTP JSON 中编码为字符串。名称去除首尾空白后须包含 1–256 个字符；非法名称返回 400，非法 ID 返回 400，不存在的记录返回 404、原因 `GREETING_NOT_FOUND`。gRPC 提供同名的 `SayHello` 和 `GetGreeting` 方法。
+
+数据层是带并发保护的**内存实现**，支持保存和按 ID 查询，返回数据副本。重启清空数据。需要持久化时替换 `GreeterRepo` 实现。
+
+## 其他协议
+
+独立的 `configs/examples.yaml` 启用全部八种协议。示例客户端有超时，并检查回复内容；任何验证失败都会以非零状态退出。
+
+| 协议 | 本地地址 | 验证命令 | 预期结果 |
+|---|---|---|---|
+| HTTP | `127.0.0.1:8000` | `./bin/client -protocol http` | 问候保存后按 ID 查询成功 |
+| gRPC | `127.0.0.1:9000` | `./bin/client -protocol grpc` | 同上 |
+| WebSocket | `ws://127.0.0.1:8001/ws` | `./bin/client -protocol websocket` | 两个客户端均收到广播 |
+| MQTT | `tcp://127.0.0.1:1883` | `./bin/client -protocol mqtt` | 请求与回复的 ID 一致 |
+| RabbitMQ | `127.0.0.1:5672` | `./bin/client -protocol rabbitmq` | 请求与回复的 ID 一致 |
+| TCP | `127.0.0.1:9001` | `./bin/client -protocol tcp` | 字节回显一致 |
+| UDP | `127.0.0.1:9002` | `./bin/client -protocol udp` | 数据报回显一致 |
+| KCP | `127.0.0.1:9003` | `./bin/client -protocol kcp` | 字节回显一致 |
+
+启动全协议示例需要 Docker Compose 和 OpenSSL：
+
+```bash
+docker compose --profile examples up -d --wait mqtt rabbitmq
+export GREETING_KCP_KEY=$(openssl rand -hex 32)
+export GREETING_KCP_SALT=$(openssl rand -hex 16)
+./bin/server -conf ./configs/examples.yaml
+```
+
+客户端在另一个终端运行；KCP 客户端和服务端需要一致的 `GREETING_KCP_KEY`、`GREETING_KCP_SALT`。可以在同一终端后台运行服务来共享环境变量。退出示例后清理本地中间件：
+
+```bash
+docker compose --profile examples down --volumes
+```
+
+`-addr` 可覆盖客户端地址，`-name` 可覆盖名称，`-timeout` 可覆盖整体请求超时。WS/TCP/KCP 的服务端 timeout 是读写超时，空闲连接会关闭；UDP 的 timeout 用于读写等待，读超时后继续接收。
+
+### WebSocket 消息
+
+使用标准文本 JSON。发送：
+
+```json
+{"type":1,"name":"World"}
+```
+
+所有已连接客户端收到：
+
+```json
+{"type":1,"message":"Hello World"}
+```
+
+不支持的类型或非法名称仅向发送者返回 `error`。服务限制消息大小为 4 KiB，并采用 gorilla/websocket 默认的同源检查。客户端命令会连接两个会话来验证广播。
+
+### MQTT / RabbitMQ 消息
+
+请求 JSON：
+
+```json
+{"request_id":"demo-1","name":"World"}
+```
+
+回复 JSON：
+
+```json
+{"request_id":"demo-1","message":"Hello World","id":1}
+```
+
+`request_id` 必须是 1–64 位字母、数字、下划线或连字符。先订阅回复，再发送请求：
+
+| 协议 | 请求目标 | 回复目标 |
+|---|---|---|
+| MQTT | `greeting/requests` | `greeting/replies/{request_id}` |
+| RabbitMQ | exchange `greeting`，routing key `greeting.request` | 同一 exchange，routing key `greeting.reply.{request_id}` |
+
+RabbitMQ 服务消费持久队列 `greeting.requests`，处理及发布回复成功后确认消息；客户端使用独占、自动删除的回复队列。非法名称返回带同一 request_id 的 `error` 回复；非法 request_id 拒绝处理。MQTT 客户端以 QoS 1 发送请求。示例展示请求与回复，不提供持久化业务处理或幂等保证。
+
+Compose 的中间件仅绑定本机回环地址。Mosquitto 匿名访问和 RabbitMQ 默认账户用于本地示例。
+
+## 构建与容器
+
+```bash
+make build                         # bin/server 和 bin/client
+make docker-build-linux-amd64       # bin/amd64/app
+make docker-build-linux-arm         # bin/arm/app，ARMv7
+make docker-build-linux-arm64       # bin/arm64/app
+
+docker build -t greeting:local .
+docker run --rm -p 127.0.0.1:8000:8000 -p 127.0.0.1:9000:9000 greeting:local
+# 或：
+docker compose --profile app up --build greeting
+```
+
+镜像使用独立的 `configs/container.yaml`，默认只启用 HTTP/gRPC，以非 root 用户运行。构建上下文排除本机 `configs/config.yaml`，避免把本机配置放进镜像。自定义配置可只读挂载并通过 `-conf` 指定：
+
+```bash
+docker run --rm -p 127.0.0.1:8000:8000 \
+  -v "$PWD/configs/container.yaml:/data/config.yaml:ro" \
+  greeting:local -conf /data/config.yaml
+```
+
+## 生成与验证
+
+修改 proto 或依赖组装后重新生成。需要 protoc；本次生成使用 protoc 36.2。生成器固定版本，安装到仓库内忽略的 `.tools/bin`。
 
 ```bash
 make init
+make all          # API 和 Wire；运行配置使用 Go 结构体
+make test         # go test -race ./...
+make smoke        # 临时端口验证六种无中间件协议、404 和 SIGTERM 退出
+make examples-smoke  # 临时本地容器验证全部八种协议
 ```
 
-安装后确认 `$(go env GOPATH)/bin` 或 `$(go env GOBIN)` 已加入 `PATH`，然后检查本地工具是否齐全：
+冒烟脚本使用临时配置和自动分配的回环端口，不读取本机业务配置。`examples-smoke` 为本次运行创建独立 Compose 项目，结束时清理所属容器、网络及卷。HTTP/gRPC 验证保存后查询；WebSocket 验证广播；MQTT/RabbitMQ 验证请求与回复；TCP/UDP/KCP 验证回显。单元测试覆盖配置、并发存储、HTTP 错误、连接超时和退出。
+
+业务实现放在 `internal/biz`，传输适配放在 `internal/server`，入口与返回值映射放在 `internal/service`，数据访问放在 `internal/data`。单体可以组装多个业务模块，独立服务可以只组装所需模块；当前默认入口是一个示例进程。
+
+## 基础设施与脚手架
+
+合并保留的 `internal/pkg` 提供可选 PostgreSQL、Redis、MongoDB、Kubernetes 服务发现、远程 gRPC、日志、指标和链路追踪能力。运行配置使用普通 Go 结构体；结构和部署环境变量入口见 `internal/conf/config.go`、各模块 config.go 和 `cmd/server/env.go`。默认外部依赖全部关闭。启用数据库只创建客户端，问候仓储仍是内存实现；启用 `data.remote_grpc.greeter` 时保存和查询转发到远程 API。
+
+HTTP 额外提供 `/readyz`（已启用的数据库客户端检查）、`/meta` 和 `/metrics`。部署示例在 `deploy/k8s`，可用 `kubectl kustomize deploy/k8s` 渲染，ServiceMonitor 另行启用。
 
 ```bash
-make doctor
+make init
+make scaffold-module PROTO=order/v1/order.proto CRUD=1
+make verify            # 等同 make check
+make generated-check   # 等同 make check-generated
+make e2e-smoke          # HTTP 健康、就绪、元信息和业务入口
 ```
 
-可选工具按使用场景安装：
-
-- Docker：构建/运行镜像、执行 `make docker-build` 或 `CONTAINER=docker make build` 时需要。
-- kubectl：验证或部署 `deploy/k8s` 示例清单时需要。
-- PostgreSQL/Redis/MongoDB/RabbitMQ/MQTT/Kubernetes/Tracing 后端：默认配置均关闭，本地首次启动不需要；启用对应 `enabled` 配置或运行 smoke tests 时再准备。
-
-### 2. 本地运行
-
-```bash
-go run ./cmd/server -conf ./configs
-```
-
-### 3. 运行测试
-
-```bash
-make verify
-```
-
-## 配置说明
-
-默认配置文件：`configs/config.yaml`
-
-关键配置项：
-
-- `server.http` / `server.grpc`：服务监听地址与超时
-- `server.middleware.ratelimit_enabled`：服务端限流开关
-- `data.postgres`：PostgreSQL 连接与连接池
-- `data.mongodb`：MongoDB 连接配置
-- `data.redis`：Redis 连接配置
-- `data.discovery.kubernetes`：Kubernetes 服务发现配置
-- `data.remote_grpc.greeter.circuitbreaker_enabled`：客户端熔断开关
-- `tracing`：OTLP tracing 配置
-
-支持通过环境变量覆盖关键配置（云原生推荐），例如：
-
-- `APP_SERVER_HTTP_ADDR`
-- `APP_SERVER_GRPC_ADDR`
-- `APP_SERVER_MIDDLEWARE_RATELIMIT_ENABLED`
-- `APP_DATA_POSTGRES_SOURCE`
-- `APP_DATA_REDIS_ADDR`
-- `APP_DATA_MONGODB_URI`
-- `APP_TRACING_ENABLED`
-
-## Docker
-
-```bash
-# build
-docker build --build-arg VERSION=$(git describe --tags --always 2>/dev/null || echo dev) -t web-template-go:local .
-
-# run
-docker run --rm -p 8000:8000 -p 9000:9000 web-template-go:local
-
-# run with custom config
-docker run --rm -p 8000:8000 -p 9000:9000 -v </path/to/configs>:/data/conf web-template-go:local
-```
-
-镜像构建使用 Go 1.24 多阶段构建，运行层为 `scratch` + nonroot 用户，并默认携带 `configs/config.yaml`。
-如需切换 Go module 代理，可追加 `--build-arg GOPROXY=https://proxy.golang.org,direct`。
-
-## Kubernetes
-
-示例清单位于 `deploy/k8s`：
-
-- `deployment.yaml`：Deployment（含 liveness/readiness probe）
-- `service.yaml`：Service（HTTP/gRPC）
-- `hpa.yaml`：HorizontalPodAutoscaler
-- `servicemonitor.yaml`：Prometheus ServiceMonitor
-- `configmap.yaml`：配置和环境变量示例
-- `secret.example.yaml`：敏感配置模板
-- `kustomization.yaml`：默认 apply 入口，不包含需要额外 CRD 的 ServiceMonitor
-
-`/readyz` 已接入依赖探活（PostgreSQL/Redis/MongoDB），当已启用依赖不可用时返回 `503`。
-默认运行图会注入当前保留的全部组件（通过配置开关控制是否启用运行行为）。
-
-```bash
-# 默认部署 HTTP/gRPC 服务、Service、HPA 和 ConfigMap
-kubectl apply -k deploy/k8s
-
-# 如集群已安装 Prometheus Operator，可额外启用 ServiceMonitor
-kubectl apply -f deploy/k8s/servicemonitor.yaml
-```
-
-启用 PostgreSQL/Redis/MongoDB、远程 gRPC 或 tracing 时，先在 `configmap.yaml` 打开对应 `APP_DATA_*_ENABLED` / `APP_TRACING_ENABLED` 开关，再从 `secret.example.yaml` 创建自己的 Secret。
-
-## 常用命令
-
-```bash
-# 检查首次运行依赖
-make doctor
-
-# 创建新的 proto/API 和 service stub（基于 Kratos CLI）
-make scaffold-proto PROTO=order/v1/order.proto
-
-# 生成代码
-make api
-
-# 生成 Wire 并整理依赖
-make generate
-
-# 检查 proto/OpenAPI/Wire 生成物是否已提交
-make generated-check
-
-# 全量测试
-make verify
-
-# 端到端冒烟测试（构建、启动、验证 HTTP 端点）
-make e2e-smoke
-
-# Docker 镜像构建
-make docker-build
-```
-
-## 贡献
-
-贡献前请阅读 `CONTRIBUTING.md`，其中列出了首次准备、不同改动类型对应的验证命令、生成物规则和 PR 前检查项。
-
-## 模块脚手架
-
-模板内置了轻量模块脚手架，复用 Kratos CLI 生成 proto 与 service stub，不额外引入运行时依赖：
-
-```bash
-make scaffold-proto PROTO=order/v1/order.proto
-```
-
-该命令会：
-
-- 在 `api/order/v1/order.proto` 创建 Kratos 标准 CRUD proto 模板
-- 修正 `go_package` 为当前 Go module 下的 `api/...` 路径
-- 在 `internal/service/order.go` 创建 service stub
-- 在 `internal/biz/order.go` 创建领域接口（`OrderRepo`）和用例结构体（`OrderUsecase`）
-- 在 `internal/data/order.go` 创建出站适配器骨架（实现 `biz.OrderRepo`）
-- 执行 `make api` 刷新 protobuf / gRPC / HTTP / validate / OpenAPI 生成物
-- 输出下一步接线清单：data/biz ProviderSet 注册、service ProviderSet、HTTP/gRPC 注册点和验证命令
-
-生成后仍需实现 `biz` 接口方法和 `data` 适配器逻辑，并在 `internal/server/grpc.go` / `internal/server/http.go` 注册新服务。
-修改 proto、Wire injector 或 provider set 后，运行 `make generated-check` 可确认 `api/**`、`openapi.yaml`、`cmd/server/wire_gen.go` 和 Go module 校验文件没有漏提交。
-
-## 架构说明
-
-该模板采用轻量 DDD 分层，并保持依赖方向单向。
-
-### 分层职责
-
-- `internal/server`：入站适配层（HTTP/gRPC 和 MQ/WebSocket 等接入）
-- `internal/service`：应用服务编排层，不承载持久化细节
-- `internal/biz`：领域用例与接口定义，不依赖传输框架细节
-- `internal/data`：出站适配层（数据库、缓存、消息发布、远程调用实现）
-- `internal/pkg/*`：基础设施 provider 与客户端初始化
-
-依赖方向：
-
-`server -> service -> biz -> data -> pkg`
-
-其中由 `biz` 定义接口，`data` 实现接口。
-
-### Greeter 示例纵切
-
-当前 `helloworld` 示例刻意保留为轻量纵切，用来展示职责边界：
-
-- `api/helloworld/v1/greeter.proto` 定义 HTTP/gRPC 协议与入参校验。
-- `internal/server/http.go` / `internal/server/grpc.go` 注册传输入口。
-- `internal/service/greeter.go` 只做 protobuf 与领域输入/输出转换。
-- `internal/biz/greeter.go` 负责名字规范化、业务默认消息、主流程编排和可选事件发布。
-- `internal/data/greeter.go` 负责出站适配：默认本地返回；配置远程 gRPC client 后转发到远端 Greeter。
-- `internal/data/rabbitmq_publisher.go` 负责可选事件发布；发布失败只记录日志，不破坏主流程。
-
-### 默认运行图
-
-默认 `wire` 注入图包含当前模板保留的全部组件：
-
-- HTTP/gRPC server
-- WebSocket/MQTT/RabbitMQ server 适配
-- DB/缓存/服务发现/日志/metrics/tracing/远程客户端 provider
-
-运行行为由配置开关（`enabled`）控制，而不是从默认注入图移除 provider。
-
-### 设计约束
-
-- 入站逻辑放 `server`，业务规则放 `biz`
-- `biz` 不依赖 protobuf 生成类型和框架细节
-- 新能力通过清晰构造函数和配置开关接入
-- 保持显式依赖注入，避免隐式全局状态
-
-## License
-
-MIT License. See [LICENSE](LICENSE) for details.
+脚手架自动生成 proto / service / biz / data 桩并接通注册和 provider，仍需实现业务规则、存储和验收测试。详细贡献流程见 [CONTRIBUTING.md](CONTRIBUTING.md)。

@@ -1,260 +1,42 @@
-# Agent Instructions
+# Agent 开发入口
 
-## Project Purpose
-- This is a Go 1.24 Kratos microservice template with HTTP, gRPC, WebSocket, MQTT, RabbitMQ, PostgreSQL, Redis, MongoDB, Kubernetes discovery, metrics, and tracing providers behind config switches.
-- Keep the architecture lightweight: transport adapters call services, services call biz usecases, biz owns interfaces and domain models, data implements outgoing adapters, and `internal/pkg/*` owns infrastructure clients.
+本仓库是 Go / Kratos 业务模板。先读本文，再读 `docs/development.md`；按需读取相关层和测试，不需要遍历整个仓库。所有 Agent 使用同一套命令，不依赖特定模型、编辑器或外部 AI 服务。
 
-## First-Run Dependencies
+## 先定位，再修改
 
-Before running the project for the first time, install the following tools.
+1. 查看 `git status --short`，保留已有改动；不要清理、覆盖、提交或推送不属于本次任务的内容。
+2. 运行 `make doctor` 检查本机条件。普通构建无需生成工具；修改 proto / Wire 后需要 `protoc` 和 `make init`。
+3. 把需求转成接口、业务规则、存储语义、错误和验收场景。多文件业务用 `make task NAME=orders` 创建任务单，随实现更新。简单修复不必创建。
+4. 遵循 `docs/development.md` 的业务改动地图；不确定的业务决策明确写出，不能把猜测当作验收结果。
 
-### Go
+## 边界与约定
 
-- Go 1.24.x (see `go.mod`: `go 1.24.0`)
+- `api/<domain>/v1/*.proto` 是 HTTP/gRPC 契约源；新增业务使用自己的 domain。不能手改 `*.pb.go`、`*.pb.validate.go`、`*_http.pb.go`、`*_grpc.pb.go`、`wire_gen.go` 或 `openapi.yaml`。
+- `internal/service` 负责协议输入输出；`internal/biz` 负责业务规则及仓储接口；`internal/data` 实现仓储。业务规则不能藏在协议回调或数据层。
+- 依赖显式构造并通过 Wire 注入。三个层的 `ProviderSet`、HTTP/gRPC 构造参数和注册都必须接通。禁止仅增加未注册的 service。
+- 单体先用业务模块和进程内调用；拆服务时沿相同 proto / usecase / repo 边界，不提前引入注册中心、消息队列或新的框架。
+- 默认只有 HTTP/gRPC；新增业务不需要同时扩展所有示例协议。需要消息协议时保持关联 ID、明确重试/幂等和失败语义。
+- 当前仓储是内存示例，重启丢失。不能声称已有生产持久化或事务保障。
+- 现有 `GET /helloworld/{name}` 有保存副作用，是兼容示例。新建资源用 POST；不要复制这个历史行为。保留已有接口兼容性，protobuf 字段号不复用。
+- 不读取或输出不必要的本地密钥、配置值、令牌；示例和任务单不放秘密。取消与超时沿 context 传递，关闭资源，不记录完整敏感载荷。
+- 用户只要求调查或方案时不执行修改、生成或验证构建；任务授权范围优先。部署、发送消息、提交和推送需符合用户明确指令。
 
-### protoc (Protocol Buffers compiler)
+## 交付门槛
 
-Install via your OS package manager:
+- 修改 proto 或构造依赖后运行 `make all`；它顺序生成 API 和 Wire。运行配置使用普通 Go 结构体，不生成配置代码。
+- 运行 `make fmt`，再运行 `make check`：格式、vet、race 测试、生成一致性、二进制构建。
+- 业务规则增加有意义的成功、失败、边界测试；新增入口至少证明路由注册和请求到仓储的真实链路。不要只测 stub 能返回常量。
+- 涉及启动、协议、生命周期时运行 `make smoke`；涉及 MQTT/RabbitMQ 时运行 `make examples-smoke`（需要 Docker）。纯业务改动无需拉起全部中间件。
+- 未完成的验证明确记录命令、失败原因和影响；不允许把未运行的检查写成通过。
+- 最终说明实际行为变化、验证结果和剩余限制。维护契约、README 与任务单；不要仅交付实现文件。
 
-```bash
-# macOS
-brew install protobuf
+## 合并后的扩展能力
 
-# Ubuntu/Debian
-sudo apt-get update && sudo apt-get install -y protobuf-compiler
-```
+- 新业务优先用 `make scaffold-module PROTO=order/v1/order.proto`，需要 CRUD 时加 `CRUD=1`。自动更新 provider、HTTP/gRPC 注册并生成分层桩；桩代码仍需实现业务、存储与验收测试。
+- `internal/conf/config.go` 聚合运行配置；`internal/server/config.go` 和各适配器拥有传输配置；`internal/data/config.go` 聚合基础设施配置。部署环境变量显式定义在 `cmd/server/env.go`。
+- `internal/pkg` 保留 main 原有的 PostgreSQL、Redis、MongoDB、Kubernetes 发现、远程 gRPC、日志、指标和链路追踪能力。默认关闭外部依赖；数据库客户端初始化成功不代表问候仓储已持久化。
+- 本地 GreeterRepo 保存→查询使用内存；启用 `data.remote_grpc.greeter` 时两种操作都转发到远程 API。业务事件发布为可选能力，失败日志不会回滚主操作，不声称跨服务事务。
+- HTTP 同时提供 `/healthz`、`/readyz`、`/meta`、`/metrics`。Kubernetes 示例在 `deploy/k8s`，默认不要求 ServiceMonitor CRD。
+- `make verify` 是 `make check` 的兼容入口；`make generated-check` 等价于 `make check-generated`。贡献流程见 `CONTRIBUTING.md`。
 
-### Go Code Generation Tools
-
-Install with `go install` using pinned versions from the Makefile:
-
-```bash
-go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.11
-go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.6.1
-go install github.com/go-kratos/kratos/cmd/kratos/v2@v2.0.0-20260228034312-fe9258d38fd4
-go install github.com/go-kratos/kratos/cmd/protoc-gen-go-http/v2@v2.0.0-20260228034312-fe9258d38fd4
-go install github.com/go-kratos/kratos/cmd/protoc-gen-go-errors/v2@v2.0.0-20260228034312-fe9258d38fd4
-go install github.com/google/gnostic/cmd/protoc-gen-openapi@v0.7.1
-go install github.com/google/wire/cmd/wire@v0.7.0
-go install github.com/envoyproxy/protoc-gen-validate@v1.3.3
-go install github.com/favadi/protoc-go-inject-tag@v1.4.0
-```
-
-Or simply run `make init` to install all Go tools at once.
-
-After installation, ensure `$(go env GOPATH)/bin` (or `$(go env GOBIN)`) is on your `PATH`, then verify:
-
-```bash
-make doctor
-```
-
-### Optional Tools
-
-- **Docker**: needed for `make docker-build` or `CONTAINER=docker make build`.
-- **kubectl**: needed for verifying or deploying `deploy/k8s` manifests.
-- **External services** (PostgreSQL, Redis, MongoDB, RabbitMQ, MQTT, Kubernetes, Tracing): all disabled by default. Only needed when enabling the corresponding `enabled` config flag or running smoke tests.
-
-## Project Map
-- `cmd/server/` - process entrypoint, YAML loading, environment overrides, Kratos app assembly, and Wire injectors.
-- `api/` - protobuf definitions and generated `.pb.go`, `_grpc.pb.go`, `_http.pb.go`, validation, errors, and OpenAPI outputs.
-- `internal/server/` - inbound transports and shared server middleware.
-- `internal/service/` - application service implementations for generated APIs and transport callbacks.
-- `internal/biz/` - usecases, domain structs, and repository/event publisher interfaces.
-- `internal/data/` - implementations of biz interfaces and outgoing adapters.
-- `internal/pkg/` - provider sets plus DB, discovery, remote gRPC, messaging, metrics, tracing, and logging helpers.
-- `configs/config.yaml` - default runtime config; defaults should keep optional external dependencies disabled for local startup.
-- `deploy/k8s/` - Kubernetes examples; default `kustomization.yaml` should stay usable without optional CRDs.
-- `tests/` - package-level tests for provider behavior, usecase behavior, and smoke tests.
-- `CONTRIBUTING.md` - contributor workflow, change-type checks, generated-file rules, and PR checklist.
-
-## Source Of Truth
-| Concern | File/Directory | Notes |
-| --- | --- | --- |
-| Runtime config shape | `internal/conf/config.go`, `internal/server/config.go`, `internal/data/config.go`, `internal/pkg/*` | Add fields here before using them in YAML or env overrides. |
-| Default config | `configs/config.yaml` | Keep defaults runnable without PostgreSQL, Redis, MongoDB, RabbitMQ, MQTT, WebSocket, tracing, or Kubernetes. |
-| Env overrides | `cmd/server/env.go` | Add explicit `APP_...` overrides for new deploy-time config keys. |
-| Contribution workflow | `CONTRIBUTING.md` | Keep change-type verification and generated-file rules aligned with Makefile targets. |
-| First-run tools | `Makefile` (`REQUIRED_TOOLS`, tool version variables, `init`, `doctor`) | Keep README install commands and doctor checks aligned. |
-| Dependency graph | `cmd/server/wire.go`, `cmd/server/wire_gen.go`, provider sets | Update `wire.go` and regenerate `wire_gen.go` after changing providers. |
-| Scaffold command | `cmd/scaffold`, `internal/scaffold` | Wraps Kratos CLI for proto/service generation, auto-registers services in server files, injects config entries, and prints remaining wiring steps. |
-| Protobuf APIs | `api/**/*.proto`, `openapi.yaml` | Generated Go files live next to proto files and OpenAPI is refreshed by `make api`. |
-| Middleware stack | `internal/server/middleware.go` | HTTP and gRPC share recovery, metadata, metrics, logging, validation, optional tracing, and optional rate limit middleware. |
-| Readiness behavior | `internal/service/system.go` | Disabled dependencies are represented by nil clients and report `skipped`; only `down` makes readiness fail. |
-| Kubernetes examples | `deploy/k8s/` | Keep `kustomization.yaml` limited to built-in Kubernetes kinds; apply `servicemonitor.yaml` separately when the CRD exists. |
-| Example module | `api/helloworld`, `internal/service/greeter.go`, `internal/biz/greeter.go`, `internal/data/greeter.go` | Keep the sample small but representative of transport, business, and outgoing adapter boundaries. |
-
-## Commands
-| Task | Command |
-| --- | --- |
-| Check local tools | `make doctor` |
-| Install generator tools | `make init` |
-| Run locally | `go run ./cmd/server -conf ./configs` |
-| Full local verification | `make verify` |
-| Tests only | `make test` |
-| External dependency smoke tests | `RUN_SMOKE=1 go test ./tests -run TestSmokeExternalDependencies` |
-| Scaffold a proto module | `make scaffold-proto PROTO=order/v1/order.proto` (add `CRUD=1` for CRUD template) |
-| Full scaffold (proto + wire) | `make scaffold-module PROTO=order/v1/order.proto` |
-| Regenerate proto/API outputs | `make api` |
-| Regenerate Wire and tidy modules | `go generate ./... && go mod tidy` |
-| Check generated outputs | `make generated-check` |
-| End-to-end smoke test | `make e2e-smoke` |
-| Build Docker image | `docker build -t web-template-go:local .` |
-| Cross-build binaries | `CONTAINER=docker make build` |
-| CI entrypoint | `.github/workflows/ci.yml` runs `make verify` and `make docker-build` |
-| Render Kubernetes examples | `kubectl kustomize deploy/k8s` |
-
-## Architecture
-
-### Layer Responsibilities
-
-```
-server -> service -> biz -> data -> pkg
-```
-
-- `internal/server/` — inbound transport adapters (HTTP, gRPC, WebSocket, MQTT, RabbitMQ). Registers services, sets up routes, and wires middleware.
-- `internal/service/` — application services. Implements generated protobuf server interfaces. Only translates between transport types (protobuf) and domain types (`biz`).
-- `internal/biz/` — domain usecases. Owns domain models, business rules, and defines outgoing interfaces (`GreeterRepo`, `GreeterEventPublisher`). Never imports protobuf or transport-specific packages.
-- `internal/data/` — outbound adapters. Implements `biz` interfaces for databases, caches, remote gRPC clients, and message publishers.
-- `internal/pkg/` — infrastructure provider sets (DB, discovery, gRPC clients, messaging, metrics, tracing, logging). Constructed by Wire.
-
-### How the gRPC Server Starts
-
-The project starts a gRPC server using Kratos transport:
-
-1. `cmd/server/main.go` loads YAML config into `conf.Bootstrap`, applies env overrides, then calls `wireApp()`.
-2. `cmd/server/wire.go` uses Wire to inject `server.NewGRPCServer` (and `NewHTTPServer`, etc.) plus all dependencies.
-3. `internal/server/grpc.go:NewGRPCServer()` creates a `kratos/v2/transport/grpc.Server` with shared middleware, then calls `v1.RegisterGreeterServer(srv, greeter)` to register each service implementation.
-4. `cmd/server/main.go:newApp()` collects all non-nil servers into `kratos.App` which manages their lifecycle (start/stop).
-
-Key config in `configs/config.yaml`:
-
-```yaml
-server:
-  grpc:
-    enabled: true
-    addr: 0.0.0.0:9000
-    timeout: 1s
-```
-
-To add a new gRPC service: implement the generated interface in `internal/service/`, add it to `internal/service/service.go` ProviderSet, and call `v1.RegisterXxxServer(srv, xxx)` in `internal/server/grpc.go`.
-
-### How the Project Connects to Other Services via gRPC
-
-The project uses `internal/pkg/grpcx/` to connect to remote gRPC services:
-
-1. **Config** (`internal/pkg/grpcx/config.go`): defines `ServiceConfig` with `Enabled`, `Target`, `Timeout`, `CircuitBreakerEnabled` per remote service.
-2. **Client factory** (`internal/pkg/grpcx/client.go`): e.g. `NewGreeterClient()` uses `kgrpc.DialInsecure()` to connect, adds metrics and optional circuit breaker middleware. Returns `(nil, func(){}, nil)` when disabled.
-3. **Wire integration** (`internal/pkg/grpcx/provider.go`): exposes `ProviderSet` containing client constructors, included in `internal/pkg/provider.go`.
-4. **Data layer usage** (`internal/data/greeter.go`): receives the `v1.GreeterClient` via constructor injection. When the client is non-nil, `Save()` forwards requests to the remote service; when nil, returns local response.
-
-Config in `configs/config.yaml`:
-
-```yaml
-data:
-  remote_grpc:
-    greeter:
-      enabled: false
-      target: "other-service:9000"
-      timeout: 500ms
-      circuitbreaker_enabled: false
-```
-
-To add a new remote gRPC client:
-
-1. Add a new field to `grpcx.Config` (e.g. `Order ServiceConfig`).
-2. Create a `NewOrderClient()` function in `internal/pkg/grpcx/client.go` following the same pattern as `NewGreeterClient`.
-3. Add it to `grpcx.ProviderSet`.
-4. Add config entry under `data.remote_grpc.order` in `configs/config.yaml`.
-5. Inject the client into the appropriate `internal/data/` constructor.
-
-### Default Wire Injection Graph
-
-Default `wire` injects all template components:
-
-- HTTP/gRPC server
-- WebSocket/MQTT/RabbitMQ server adapters
-- DB/cache/discovery/logging/metrics/tracing/remote client providers
-
-Runtime behavior is controlled by `enabled` config flags, not by removing providers from the graph.
-
-### Greeter Example Module
-
-The `helloworld` example is a vertical slice that demonstrates the full layer boundary pattern:
-
-| Layer | File | Responsibility |
-| --- | --- | --- |
-| Proto/API | `api/helloworld/v1/greeter.proto` | Defines gRPC + HTTP routes, request/response types, and field validation rules. |
-| Server | `internal/server/grpc.go`, `internal/server/http.go` | Registers `GreeterService` on gRPC and HTTP transports. |
-| Service | `internal/service/greeter.go` | Implements `v1.GreeterServer`. Translates protobuf request to domain input, calls `GreeterUsecase`, converts domain output to protobuf response. |
-| Biz | `internal/biz/greeter.go` | Defines `Greeter` domain model, `GreeterRepo` and `GreeterEventPublisher` interfaces, and `GreeterUsecase` with business rules (name normalization, validation, event emission). |
-| Data (Repo) | `internal/data/greeter.go` | Implements `GreeterRepo`. When remote gRPC client is configured, forwards to remote service; otherwise returns local response. |
-| Data (Event) | `internal/data/rabbitmq_publisher.go` | Implements `GreeterEventPublisher`. Publishes to RabbitMQ when enabled; `noopGreeterPublisher` when disabled. |
-
-The data layer currently uses remote gRPC forwarding instead of GORM/DB as the outbound adapter. This demonstrates that the `data` layer abstracts the outbound mechanism: a real module would replace this with GORM CRUD, a cache lookup, or any other persistence strategy. To add a new module with GORM CRUD, the data layer would receive `*gorm.DB` via Wire and implement `biz` repository interfaces with actual database operations.
-
-## Common Workflows
-### Add Or Change Runtime Config
-1. Add the typed field in the owning config struct.
-2. Add or update `configs/config.yaml` with safe defaults.
-3. Add environment overrides in `cmd/server/env.go` for deployment-facing keys.
-4. Add focused tests for disabled mode, missing required fields, and any defaulting behavior.
-
-### Add A New Provider Or Adapter
-1. Put infrastructure clients in `internal/pkg/<name>` and expose a `ProviderSet` when Wire should construct it.
-2. Return `(nil, func(){}, nil)` when an optional provider is disabled; tests expect disabled providers to be no-op and still return cleanup functions.
-3. Add the provider set to `internal/pkg/provider.go` or the appropriate layer provider set.
-4. Update `cmd/server/wire.go`, then run `go generate ./...` to refresh `cmd/server/wire_gen.go`.
-5. Add tests under `tests/` for disabled mode and missing required config.
-
-### Add Or Change A Protobuf API
-1. For a new API, prefer `make scaffold-proto PROTO=order/v1/order.proto`; it wraps Kratos CLI, fixes `go_package`, creates service/biz/data stubs, auto-registers in server files, injects config entries, and prints remaining steps. Add `CRUD=1` for standard CRUD template with Create/Get/List/Update/Delete. Use `make scaffold-module` for the full end-to-end flow including wire regeneration.
-2. For existing APIs, edit `api/**/*.proto`; use `third_party/` imports already vendored in this repo, then run `make api`.
-3. Implement the generated server interface in `internal/service/`.
-4. Service registration in `internal/server/grpc.go` and `internal/server/http.go` is handled automatically by the scaffold. Only edit manually if using `--skip-auto-register`.
-5. Keep protobuf/generated types out of `internal/biz`; translate at the service boundary.
-
-### Add Business Behavior
-1. Define domain interfaces in `internal/biz`.
-2. Implement outgoing behavior in `internal/data`.
-3. Keep transport details in `internal/server` or `internal/service`.
-4. Test business flow with mocks in `tests/`, following `tests/greeter_usecase_test.go`.
-
-### Add A New Remote gRPC Client
-1. Add a new `ServiceConfig` field to `internal/pkg/grpcx/config.go` Config struct.
-2. Create `New<Service>Client()` in `internal/pkg/grpcx/client.go` following the `NewGreeterClient` pattern: check `Enabled`, validate `Target` and `Timeout`, build metrics/circuit breaker middleware, call `kgrpc.DialInsecure()`.
-3. Add the constructor to `grpcx.ProviderSet` in `internal/pkg/grpcx/provider.go`.
-4. Add config entry under `data.remote_grpc.<service>` in `configs/config.yaml` with `enabled: false`.
-5. Inject the generated client into the appropriate `internal/data/` constructor.
-6. Add tests under `tests/` for disabled mode and connection behavior.
-
-## Conventions
-- Optional runtime components are controlled by `enabled` config flags instead of being removed from the Wire graph.
-- Constructor cleanup functions must be safe to call even when initialization is skipped.
-- Use Kratos logging helpers with a `module` field matching the package area.
-- Remote gRPC clients live in `internal/pkg/grpcx`; current clients use `grpc.DialInsecure`, require target and timeout when enabled, and may add client metrics/circuit breaker middleware.
-- RabbitMQ publisher targets are explicit constants in `internal/data/rabbitmq_publisher.go`; do not publish without exchange and routing key.
-- The scaffold command lives in `cmd/scaffold` with reusable logic in `internal/scaffold`; keep it standard-library based, delegate code generation to Kratos/protoc tooling, auto-register services in server files, inject config entries, and keep next-step output aligned with this template's flow.
-- `make doctor` is the first-run dependency gate; when adding generator tools, update `REQUIRED_TOOLS`, pinned tool version variables, `make init`, README install commands, and the relevant generation target together.
-- The Dockerfile is for the default single-service image path: build `./cmd/server` with Go 1.24 and run it on `scratch` as nonroot with default config copied to `/data/conf`.
-- Keep CI lightweight by wiring it through Makefile targets instead of duplicating command lists in `.github/workflows/ci.yml`.
-- Keep `CONTRIBUTING.md`, `README.md`, and this file aligned when verification commands or generated-file rules change.
-- K8s defaults should mirror `configs/config.yaml`: optional dependencies disabled, HTTP `/healthz` and `/readyz` probes, HTTP and gRPC ports exposed.
-- The Greeter example is documentation-by-code; keep service limited to transport mapping, biz responsible for domain rules, and data responsible for local/remote outgoing adapters.
-- Do not hand-edit generated `api/**/*.pb.go`, `api/**/*_grpc.pb.go`, `api/**/*_http.pb.go`, or `cmd/server/wire_gen.go`; change the source proto or Wire injector and regenerate.
-
-## Verification
-- Run `make verify` before finishing normal code changes.
-- Run `make doctor` after changing first-run tool requirements or generator commands.
-- Run `make generated-check` after proto, OpenAPI, Wire injector, provider set, or generator version changes. This target assumes the local `protoc` version matches the committed generated files.
-- Run `RUN_SMOKE=1 go test ./tests -run TestSmokeExternalDependencies` only when PostgreSQL, Redis, and MongoDB smoke endpoints are available.
-- After config or provider changes, include tests for disabled mode and missing required config.
-- After proto or DI changes, verify generated files are refreshed with `make generated-check` and no stale manual edits remain.
-- After Kubernetes manifest changes, run `kubectl kustomize deploy/k8s` when `kubectl` is available.
-
-## Common Pitfalls
-- `make build` still uses containerized cross-build targets and expects a `CONTAINER` command such as `docker`; use `docker build -t web-template-go:local .` for the normal image path.
-- `make run` already starts `go run ./cmd/server -conf ./configs`; use the explicit command above when you need to pass different flags.
-- `RUN_SMOKE=1` tests require external services named `codex-postgres`, `codex-redis`, and `codex-mongo`.
-
-## Maintenance Trigger
-- Update this file when layer boundaries, generator commands, provider registration, config/env conventions, or verification commands change.
+脚手架或注册逻辑变化时运行 `make scaffold-smoke`：在临时副本真实生成普通与 CRUD 模块，验证注册、Wire、编译和生成一致性，不修改当前源码。需要 `make init` 安装的工具。

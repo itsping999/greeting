@@ -6,6 +6,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"go/ast"
+	"go/format"
+	"go/parser"
+	"go/token"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -310,25 +314,48 @@ func updateProviderSet(path, constructorName string) error {
 	if err != nil {
 		return err
 	}
-	str := string(content)
-	if strings.Contains(str, constructorName) {
-		return nil // already present
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, path, content, parser.ParseComments)
+	if err != nil {
+		return err
 	}
-	idx := strings.LastIndex(str, ")")
-	if idx < 0 {
-		return fmt.Errorf("cannot find closing paren in %s", path)
+	for _, decl := range file.Decls {
+		variable, ok := decl.(*ast.GenDecl)
+		if !ok || variable.Tok != token.VAR {
+			continue
+		}
+		for _, spec := range variable.Specs {
+			value, ok := spec.(*ast.ValueSpec)
+			if !ok {
+				continue
+			}
+			for i, name := range value.Names {
+				if name.Name != "ProviderSet" || i >= len(value.Values) {
+					continue
+				}
+				call, ok := value.Values[i].(*ast.CallExpr)
+				if !ok {
+					continue
+				}
+				selector, ok := call.Fun.(*ast.SelectorExpr)
+				if !ok || selector.Sel.Name != "NewSet" {
+					continue
+				}
+				for _, arg := range call.Args {
+					if ident, ok := arg.(*ast.Ident); ok && ident.Name == constructorName {
+						return nil
+					}
+				}
+				call.Args = append(call.Args, ast.NewIdent(constructorName))
+				var output bytes.Buffer
+				if err := format.Node(&output, fset, file); err != nil {
+					return err
+				}
+				return os.WriteFile(path, output.Bytes(), 0o644)
+			}
+		}
 	}
-	prefix := str[:idx]
-	if strings.HasSuffix(strings.TrimRight(prefix, " \t"), "\n") {
-		// Multi-line: insert with tab indentation before the closing paren
-		insert := fmt.Sprintf("\t%s,\n", constructorName)
-		next := prefix + insert + str[idx:]
-		return os.WriteFile(path, []byte(next), 0o644)
-	}
-	// Single-line: insert before closing paren with comma separator
-	insert := fmt.Sprintf(", %s", constructorName)
-	next := prefix + insert + str[idx:]
-	return os.WriteFile(path, []byte(next), 0o644)
+	return fmt.Errorf("cannot find ProviderSet wire.NewSet in %s", path)
 }
 
 // updateProviderSets adds New<Service>Service, New<Singular>Usecase, and
@@ -392,19 +419,20 @@ func rewriteProtoAsCRUD(protoPath, protoRel string) error {
 		``,
 		`option go_package = "placeholder";`,
 		``,
+		`import "google/api/annotations.proto";`,
 		`import "google/protobuf/timestamp.proto";`,
 		`import "google/protobuf/empty.proto";`,
 		`import "validate/validate.proto";`,
 		``,
 		`service ` + svcName + ` {`,
-		`  rpc Create` + singular + `(Create` + singular + `Request) returns (` + singular + `);`,
-		`  rpc Get` + singular + `(Get` + singular + `Request) returns (` + singular + `);`,
-		`  rpc List` + plural + `(List` + plural + `Request) returns (List` + plural + `Response);`,
-		`  rpc Update` + singular + `(Update` + singular + `Request) returns (` + singular + `);`,
-		`  rpc Delete` + singular + `(Delete` + singular + `Request) returns (google.protobuf.Empty);`,
+		`  rpc Create` + singular + `(Create` + singular + `Request) returns (` + singular + `Record) { option (google.api.http) = { post: "/` + baseName + `" body: "*" }; }`,
+		`  rpc Get` + singular + `(Get` + singular + `Request) returns (` + singular + `Record) { option (google.api.http) = { get: "/` + baseName + `/{id}" }; }`,
+		`  rpc List` + plural + `(List` + plural + `Request) returns (List` + plural + `Response) { option (google.api.http) = { get: "/` + baseName + `" }; }`,
+		`  rpc Update` + singular + `(Update` + singular + `Request) returns (` + singular + `Record) { option (google.api.http) = { put: "/` + baseName + `/{id}" body: "*" }; }`,
+		`  rpc Delete` + singular + `(Delete` + singular + `Request) returns (google.protobuf.Empty) { option (google.api.http) = { delete: "/` + baseName + `/{id}" }; }`,
 		`}`,
 		``,
-		`message ` + singular + ` {`,
+		`message ` + singular + `Record {`,
 		`  string id = 1;`,
 		`  // TODO: add domain fields`,
 		`  google.protobuf.Timestamp created_at = 20;`,
@@ -425,7 +453,7 @@ func rewriteProtoAsCRUD(protoPath, protoRel string) error {
 		`}`,
 		``,
 		`message List` + plural + `Response {`,
-		`  repeated ` + singular + ` items = 1;`,
+		`  repeated ` + singular + `Record items = 1;`,
 		`  int32 total = 2;`,
 		`}`,
 		``,
@@ -452,42 +480,55 @@ func registerServiceInServer(filePath, svcName, importPath, protoPkg string, isG
 	if err != nil {
 		return err
 	}
-	str := string(content)
-
-	var registerCall string
+	alias := strings.ReplaceAll(protoPkg, ".", "_")
+	param := lowerCamel(singularize(svcName))
+	register := "Register" + svcName + "HTTPServer"
+	constructor := "NewHTTPServer"
 	if isGRPC {
-		registerCall = fmt.Sprintf("%s.Register%sServer(srv, %s)", protoPkg, svcName, lowerCamel(singularize(svcName)))
-	} else {
-		registerCall = fmt.Sprintf("%s.Register%sHTTPServer(srv, %s)", protoPkg, svcName, lowerCamel(singularize(svcName)))
+		register = "Register" + svcName + "Server"
+		constructor = "NewGRPCServer"
 	}
-
-	// Already registered
-	if strings.Contains(str, registerCall) {
+	call := fmt.Sprintf("%s.%s(srv, %s)", alias, register, param)
+	if strings.Contains(string(content), call) {
 		return nil
 	}
-
-	// Add import
-	alias := protoPkg
-	str = addImport(str, alias, importPath)
-
-	// Add registration call after srv := ...NewServer(...)
-	idx := strings.Index(str, "srv := ")
-	if idx < 0 {
-		// Try alternate pattern
-		idx = strings.Index(str, "srv:=")
+	source := addImport(string(content), alias, importPath)
+	module := strings.SplitN(importPath, "/api/", 2)[0]
+	source = addImport(source, "", module+"/internal/service")
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, filePath, source, parser.ParseComments)
+	if err != nil {
+		return err
 	}
-	if idx < 0 {
-		return fmt.Errorf("cannot find 'srv :=' in %s", filePath)
+	for _, decl := range file.Decls {
+		fn, ok := decl.(*ast.FuncDecl)
+		if !ok || fn.Name.Name != constructor {
+			continue
+		}
+		fn.Type.Params.List = append(fn.Type.Params.List, &ast.Field{Names: []*ast.Ident{ast.NewIdent(param)}, Type: &ast.StarExpr{X: &ast.SelectorExpr{X: ast.NewIdent("service"), Sel: ast.NewIdent(svcName + "Service")}}})
+		for i, stmt := range fn.Body.List {
+			assignment, ok := stmt.(*ast.AssignStmt)
+			if !ok {
+				continue
+			}
+			for _, lhs := range assignment.Lhs {
+				ident, ok := lhs.(*ast.Ident)
+				if !ok || ident.Name != "srv" {
+					continue
+				}
+				expression := &ast.ExprStmt{X: &ast.CallExpr{Fun: &ast.SelectorExpr{X: ast.NewIdent(alias), Sel: ast.NewIdent(register)}, Args: []ast.Expr{ast.NewIdent("srv"), ast.NewIdent(param)}}}
+				tail := append([]ast.Stmt{expression}, fn.Body.List[i+1:]...)
+				fn.Body.List = append(fn.Body.List[:i+1], tail...)
+				var output bytes.Buffer
+				if err := format.Node(&output, fset, file); err != nil {
+					return err
+				}
+				return os.WriteFile(filePath, output.Bytes(), 0o644)
+			}
+		}
+		return fmt.Errorf("cannot find server initialization in %s", filePath)
 	}
-	// Find end of line
-	eol := strings.Index(str[idx:], "\n")
-	if eol < 0 {
-		eol = len(str) - idx
-	}
-	insertPos := idx + eol
-	str = str[:insertPos] + "\n\t" + registerCall + str[insertPos:]
-
-	return os.WriteFile(filePath, []byte(str), 0o644)
+	return fmt.Errorf("cannot find %s in %s", constructor, filePath)
 }
 
 // addImport adds an import line to a Go file if not already present.
@@ -679,6 +720,9 @@ func ` + constructorName + `(repo ` + interfaceName + `, logger log.Logger) *` +
 ` + ucMethods + `
 `
 
+	if !crud {
+		tpl = strings.Replace(tpl, "\t\"context\"\n", "", 1)
+	}
 	if err := ensureOrCreateDir(filepath.Join(root, bizDir)); err != nil {
 		return "", err
 	}
@@ -733,11 +777,9 @@ func (r *%s) Delete(ctx context.Context, id string) error {
 		)
 	}
 
-	importLines := []string{
-		"\"context\"",
-	}
+	importLines := []string{}
 	if crud {
-		importLines = append(importLines, "\"fmt\"")
+		importLines = append(importLines, "\"context\"", "\"fmt\"")
 	}
 	importLines = append(importLines,
 		"\"github.com/go-kratos/kratos/v2/log\"",

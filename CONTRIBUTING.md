@@ -4,7 +4,7 @@ This template aims to stay lightweight, explicit, and easy to extend. Prefer Kra
 
 ## Local Setup
 
-1. Install Go 1.24.x and `protoc`.
+1. Install Go 1.27.1 and `protoc`.
 2. Install pinned generator tools:
 
 ```bash
@@ -78,3 +78,5 @@ Regenerate from the source proto or Wire injector and commit the generated outpu
 - New config has typed fields, safe defaults, and env overrides when deployment-facing.
 - Public docs and `AGENTS.md` are updated when commands, layer boundaries, generator behavior, or verification rules change.
 - Verification output is included in the PR description.
+
+脚手架或注册逻辑变化时运行 `make scaffold-smoke`：在临时副本真实生成普通与 CRUD 模块，验证注册、Wire、编译和生成一致性，不修改当前源码。需要 `make init` 安装的工具。

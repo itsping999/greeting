@@ -9,7 +9,7 @@ import (
 	"github.com/go-kratos/kratos/v2/middleware/circuitbreaker"
 	kratosmetrics "github.com/go-kratos/kratos/v2/middleware/metrics"
 	kgrpc "github.com/go-kratos/kratos/v2/transport/grpc"
-	v1 "github.com/wyuhsin/web-template-go/api/helloworld/v1"
+	v1 "github.com/itsping999/greeting/api/helloworld/v1"
 	"go.opentelemetry.io/otel"
 )
 

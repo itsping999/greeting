@@ -81,7 +81,7 @@ type HelloRequestMultiError []error
 
 // Error returns a concatenation of all the error messages it wraps.
 func (m HelloRequestMultiError) Error() string {
-	msgs := make([]string, 0, len(m))
+	var msgs []string
 	for _, err := range m {
 		msgs = append(msgs, err.Error())
 	}
@@ -169,6 +169,8 @@ func (m *HelloReply) validate(all bool) error {
 
 	// no validation rules for Message
 
+	// no validation rules for Id
+
 	if len(errors) > 0 {
 		return HelloReplyMultiError(errors)
 	}
@@ -182,7 +184,7 @@ type HelloReplyMultiError []error
 
 // Error returns a concatenation of all the error messages it wraps.
 func (m HelloReplyMultiError) Error() string {
-	msgs := make([]string, 0, len(m))
+	var msgs []string
 	for _, err := range m {
 		msgs = append(msgs, err.Error())
 	}
@@ -245,3 +247,116 @@ var _ interface {
 	Cause() error
 	ErrorName() string
 } = HelloReplyValidationError{}
+
+// Validate checks the field values on GetGreetingRequest with the rules
+// defined in the proto definition for this message. If any rules are
+// violated, the first error encountered is returned, or nil if there are no violations.
+func (m *GetGreetingRequest) Validate() error {
+	return m.validate(false)
+}
+
+// ValidateAll checks the field values on GetGreetingRequest with the rules
+// defined in the proto definition for this message. If any rules are
+// violated, the result is a list of violation errors wrapped in
+// GetGreetingRequestMultiError, or nil if none found.
+func (m *GetGreetingRequest) ValidateAll() error {
+	return m.validate(true)
+}
+
+func (m *GetGreetingRequest) validate(all bool) error {
+	if m == nil {
+		return nil
+	}
+
+	var errors []error
+
+	if m.GetId() <= 0 {
+		err := GetGreetingRequestValidationError{
+			field:  "Id",
+			reason: "value must be greater than 0",
+		}
+		if !all {
+			return err
+		}
+		errors = append(errors, err)
+	}
+
+	if len(errors) > 0 {
+		return GetGreetingRequestMultiError(errors)
+	}
+
+	return nil
+}
+
+// GetGreetingRequestMultiError is an error wrapping multiple validation errors
+// returned by GetGreetingRequest.ValidateAll() if the designated constraints
+// aren't met.
+type GetGreetingRequestMultiError []error
+
+// Error returns a concatenation of all the error messages it wraps.
+func (m GetGreetingRequestMultiError) Error() string {
+	var msgs []string
+	for _, err := range m {
+		msgs = append(msgs, err.Error())
+	}
+	return strings.Join(msgs, "; ")
+}
+
+// AllErrors returns a list of validation violation errors.
+func (m GetGreetingRequestMultiError) AllErrors() []error { return m }
+
+// GetGreetingRequestValidationError is the validation error returned by
+// GetGreetingRequest.Validate if the designated constraints aren't met.
+type GetGreetingRequestValidationError struct {
+	field  string
+	reason string
+	cause  error
+	key    bool
+}
+
+// Field function returns field value.
+func (e GetGreetingRequestValidationError) Field() string { return e.field }
+
+// Reason function returns reason value.
+func (e GetGreetingRequestValidationError) Reason() string { return e.reason }
+
+// Cause function returns cause value.
+func (e GetGreetingRequestValidationError) Cause() error { return e.cause }
+
+// Key function returns key value.
+func (e GetGreetingRequestValidationError) Key() bool { return e.key }
+
+// ErrorName returns error name.
+func (e GetGreetingRequestValidationError) ErrorName() string {
+	return "GetGreetingRequestValidationError"
+}
+
+// Error satisfies the builtin error interface
+func (e GetGreetingRequestValidationError) Error() string {
+	cause := ""
+	if e.cause != nil {
+		cause = fmt.Sprintf(" | caused by: %v", e.cause)
+	}
+
+	key := ""
+	if e.key {
+		key = "key for "
+	}
+
+	return fmt.Sprintf(
+		"invalid %sGetGreetingRequest.%s: %s%s",
+		key,
+		e.field,
+		e.reason,
+		cause)
+}
+
+var _ error = GetGreetingRequestValidationError{}
+
+var _ interface {
+	Field() string
+	Reason() string
+	Key() bool
+	Cause() error
+	ErrorName() string
+} = GetGreetingRequestValidationError{}

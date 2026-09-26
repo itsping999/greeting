@@ -2,10 +2,10 @@ package provider
 
 import (
 	"github.com/google/wire"
-	"github.com/wyuhsin/web-template-go/internal/pkg/dbx"
-	"github.com/wyuhsin/web-template-go/internal/pkg/discoveryx"
-	"github.com/wyuhsin/web-template-go/internal/pkg/grpcx"
-	"github.com/wyuhsin/web-template-go/internal/pkg/messagingx"
+	"github.com/itsping999/greeting/internal/pkg/dbx"
+	"github.com/itsping999/greeting/internal/pkg/discoveryx"
+	"github.com/itsping999/greeting/internal/pkg/grpcx"
+	"github.com/itsping999/greeting/internal/pkg/messagingx"
 )
 
 var ProviderSet = wire.NewSet(

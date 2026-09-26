@@ -31,9 +31,12 @@ Thumbs.db
 *.key
 *.log
 bin/
-server
+/server
 
 # Develop tools
 .vscode/
 .idea/
 *.swp
+
+# Pinned local generators
+.tools/

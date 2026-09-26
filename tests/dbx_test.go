@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/go-kratos/kratos/v2/log"
-	"github.com/wyuhsin/web-template-go/internal/pkg/dbx"
+	"github.com/itsping999/greeting/internal/pkg/dbx"
 )
 
 func TestDisabledProvidersReturnNoErrorAndCleanup(t *testing.T) {

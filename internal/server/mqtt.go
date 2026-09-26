@@ -1,51 +1,25 @@
 package server
 
 import (
-	"context"
-	"strings"
-
 	"github.com/go-kratos/kratos/v2/log"
-	"github.com/tx7do/kratos-transport/transport/mqtt"
-
+	"github.com/itsping999/greeting/internal/pkg/messagingx"
+	"github.com/itsping999/greeting/internal/protocol"
+	"github.com/itsping999/greeting/internal/service"
 	"github.com/tx7do/kratos-transport/broker"
+	"github.com/tx7do/kratos-transport/broker/mqtt"
+	"time"
 )
 
-type MQTTConfig struct {
-	Enabled bool   `json:"enabled" yaml:"enabled"`
-	Addr    string `json:"addr" yaml:"addr"`
-	Topic   string `json:"topic" yaml:"topic"`
-}
-
-// NewMQTTServer create a mqtt server.
-func NewMQTTServer(
-	c *MQTTConfig,
-	logger log.Logger,
-) *mqtt.Server {
-	helper := log.NewHelper(log.With(logger, "module", "server/mqtt"))
+func NewMQTTServer(c *MQTTConfig, logger log.Logger, svc *service.GreeterService) *BrokerServer {
 	if c == nil || !c.Enabled {
-		helper.Info("mqtt server disabled, skip initialization")
 		return nil
 	}
-	addr := strings.TrimSpace(c.Addr)
-	topic := strings.TrimSpace(c.Topic)
-	if addr == "" || topic == "" {
-		helper.Error("mqtt server config invalid: addr/topic must be set when enabled")
-		return nil
+
+	topic := c.Topic
+	if topic == "" {
+		topic = protocol.MQTTRequestTopic
 	}
-	ctx := context.Background()
-
-	srv := mqtt.NewServer(
-		mqtt.WithAddress([]string{addr}),
-		mqtt.WithCodec("json"),
-	)
-
-	_ = srv.RegisterSubscriber(ctx,
-		topic,
-		func(context.Context, broker.Event) error {
-			return nil
-		},
-		func() broker.Any { return struct{}{} },
-	)
-
-	return srv
+	return &BrokerServer{broker: mqtt.NewBroker(broker.WithAddress(c.Addr), broker.WithCodec("json"), mqtt.WithConnectTimeout(5*time.Second), mqtt.WithWriteTimeout(5*time.Second)), name: "MQTT", topic: topic, replyPrefix: protocol.MQTTReplyPrefix, handle: svc.OnMQTTMessage, log: log.NewHelper(logger), opts: []broker.SubscribeOption{mqtt.WithSubscribeQos(1)}}
 }
+
+type MQTTConfig = messagingx.MQTTConfig

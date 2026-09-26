@@ -3,22 +3,22 @@ package biz
 import (
 	"context"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/go-kratos/kratos/v2/errors"
 	"github.com/go-kratos/kratos/v2/log"
 )
 
 var (
-	ReasonUserNotFound = "USER_NOT_FOUND"
-	ReasonInvalidName  = "INVALID_NAME"
+	ReasonInvalidName = "INVALID_NAME"
 
-	// ErrUserNotFound is user not found.
-	ErrUserNotFound = errors.NotFound(ReasonUserNotFound, "user not found")
-	ErrInvalidName  = errors.BadRequest(ReasonInvalidName, "name is required")
+	ErrGreetingNotFound = errors.NotFound("GREETING_NOT_FOUND", "greeting not found")
+	ErrInvalidName      = errors.BadRequest(ReasonInvalidName, "name must contain 1 to 256 characters")
 )
 
 // Greeter is a Greeter model.
 type Greeter struct {
+	ID      int64
 	Name    string
 	Message string
 	Source  string
@@ -27,6 +27,7 @@ type Greeter struct {
 // GreeterRepo stores or forwards Greeter domain data.
 type GreeterRepo interface {
 	Save(context.Context, *Greeter) (*Greeter, error)
+	FindByID(context.Context, int64) (*Greeter, error)
 }
 
 // GreeterEventPublisher publishes optional Greeter domain events.
@@ -58,7 +59,7 @@ func NewGreeterUsecase(
 // emits an optional event after the main flow succeeds.
 func (uc *GreeterUsecase) CreateGreeter(ctx context.Context, name string) (*Greeter, error) {
 	name = strings.TrimSpace(name)
-	if name == "" {
+	if name == "" || utf8.RuneCountInString(name) > 256 {
 		return nil, ErrInvalidName
 	}
 
@@ -66,7 +67,6 @@ func (uc *GreeterUsecase) CreateGreeter(ctx context.Context, name string) (*Gree
 		Name:    name,
 		Message: "Hello " + name,
 	}
-	uc.log.WithContext(ctx).Infof("CreateGreeter: %v", g.Name)
 	saved, err := uc.repo.Save(ctx, g)
 	if err != nil {
 		return nil, err
@@ -77,4 +77,11 @@ func (uc *GreeterUsecase) CreateGreeter(ctx context.Context, name string) (*Gree
 		}
 	}
 	return saved, nil
+}
+
+func (uc *GreeterUsecase) GetGreeting(ctx context.Context, id int64) (*Greeter, error) {
+	if id <= 0 {
+		return nil, errors.BadRequest("INVALID_ID", "id must be positive")
+	}
+	return uc.repo.FindByID(ctx, id)
 }

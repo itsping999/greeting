@@ -1,49 +1,139 @@
 package server
 
 import (
-	"strings"
+	"context"
+	"errors"
+	"net"
+	"net/http"
+	"sync"
+	"time"
 
 	"github.com/go-kratos/kratos/v2/log"
-	"github.com/tx7do/kratos-transport/transport/websocket"
-
-	"github.com/wyuhsin/web-template-go/internal/service"
+	"github.com/gorilla/websocket"
+	"github.com/itsping999/greeting/internal/protocol"
+	"github.com/itsping999/greeting/internal/service"
 )
 
-type WebSocketConfig struct {
-	Enabled bool   `json:"enabled" yaml:"enabled"`
-	Addr    string `json:"addr" yaml:"addr"`
-	Path    string `json:"path" yaml:"path"`
+type wsClient struct {
+	conn *websocket.Conn
+	mu   sync.Mutex
+}
+type WebsocketServer struct {
+	mu         sync.Mutex
+	clients    map[*wsClient]struct{}
+	stopped    bool
+	httpServer *http.Server
+	listener   net.Listener
+	workers    sync.WaitGroup
+	c          *WebSocketConfig
+	svc        *service.GreeterService
+	log        *log.Helper
 }
 
-// NewWebsocketServer create a websocket server.
-func NewWebsocketServer(
-	rt *WebSocketConfig,
-	_ log.Logger,
-	svc *service.GreeterService,
-) *websocket.Server {
-	if rt == nil || !rt.Enabled {
+func NewWebsocketServer(c *WebSocketConfig, logger log.Logger, svc *service.GreeterService) *WebsocketServer {
+	if c == nil || !c.Enabled {
 		return nil
 	}
-	addr := strings.TrimSpace(rt.Addr)
-	path := strings.TrimSpace(rt.Path)
-	if addr == "" || path == "" {
+
+	s := &WebsocketServer{c: c, svc: svc, clients: make(map[*wsClient]struct{}), log: log.NewHelper(logger)}
+	mux := http.NewServeMux()
+	mux.HandleFunc(c.Path, s.handle)
+	s.httpServer = &http.Server{Handler: mux, ReadHeaderTimeout: Timeout(c.Timeout)}
+	return s
+}
+func (s *WebsocketServer) Start(context.Context) error {
+	s.mu.Lock()
+	if s.stopped {
+		s.mu.Unlock()
 		return nil
 	}
-	srv := websocket.NewServer(
-		websocket.WithAddress(addr),
-		websocket.WithPath(path),
-		websocket.WithConnectHandle(svc.OnWebsocketConnect),
-		websocket.WithCodec("json"),
-	)
+	lis, err := net.Listen("tcp", s.c.Addr)
+	if err != nil {
+		s.mu.Unlock()
+		return err
+	}
+	s.listener = lis
+	s.mu.Unlock()
+	s.log.Infof("[WebSocket] listening on %s%s", lis.Addr(), s.c.Path)
+	err = s.httpServer.Serve(lis)
+	if errors.Is(err, http.ErrServerClosed) || errors.Is(err, net.ErrClosed) {
+		return nil
+	}
+	return err
+}
+func (s *WebsocketServer) handle(w http.ResponseWriter, r *http.Request) {
+	upgrader := websocket.Upgrader{ReadBufferSize: 1024, WriteBufferSize: 1024}
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		return
+	}
+	client := &wsClient{conn: conn}
+	s.mu.Lock()
+	if s.stopped {
+		s.mu.Unlock()
+		conn.Close()
+		return
+	}
+	s.clients[client] = struct{}{}
+	s.workers.Add(1)
+	s.mu.Unlock()
+	defer s.workers.Done()
+	defer func() { conn.Close(); s.mu.Lock(); delete(s.clients, client); s.mu.Unlock() }()
+	conn.SetReadLimit(4096)
+	timeout := Timeout(s.c.Timeout)
+	for {
+		conn.SetReadDeadline(time.Now().Add(timeout))
+		var in protocol.ChatMessage
+		if err := conn.ReadJSON(&in); err != nil {
+			return
+		}
+		out := s.svc.OnChatMessage(r.Context(), in)
+		if out.Error != "" {
+			if err := s.send(client, out); err != nil {
+				return
+			}
+			continue
+		}
+		s.mu.Lock()
+		clients := make([]*wsClient, 0, len(s.clients))
+		for c := range s.clients {
+			clients = append(clients, c)
+		}
+		s.mu.Unlock()
+		for _, c := range clients {
+			if err := s.send(c, out); err != nil {
+				c.conn.Close()
+			}
+		}
+	}
+}
+func (s *WebsocketServer) send(c *wsClient, out protocol.ChatMessage) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.conn.SetWriteDeadline(time.Now().Add(Timeout(s.c.Timeout)))
+	return c.conn.WriteJSON(out)
+}
+func (s *WebsocketServer) Stop(ctx context.Context) error {
+	s.mu.Lock()
+	s.stopped = true
+	for c := range s.clients {
+		c.conn.Close()
+	}
+	s.mu.Unlock()
+	err := s.httpServer.Shutdown(ctx)
+	done := make(chan struct{})
+	go func() { s.workers.Wait(); close(done) }()
+	select {
+	case <-done:
+		return err
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
 
-	svc.SetWebsocketServer(srv)
-
-	srv.RegisterMessageHandler(1,
-		func(sessionId websocket.SessionID, payload websocket.MessagePayload) error {
-			return svc.OnChatMessage(sessionId, payload)
-		},
-		func() websocket.Any { return struct{}{} },
-	)
-
-	return srv
+type WebSocketConfig struct {
+	Enabled bool          `json:"enabled" yaml:"enabled"`
+	Addr    string        `json:"addr" yaml:"addr"`
+	Path    string        `json:"path" yaml:"path"`
+	Timeout time.Duration `json:"timeout" yaml:"timeout"`
 }

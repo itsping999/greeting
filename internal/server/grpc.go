@@ -4,9 +4,9 @@ import (
 	"time"
 
 	"github.com/go-kratos/kratos/v2/log"
-	"github.com/wyuhsin/web-template-go/api/helloworld/v1"
-	"github.com/wyuhsin/web-template-go/internal/pkg/tracingx"
-	"github.com/wyuhsin/web-template-go/internal/service"
+	"github.com/itsping999/greeting/api/helloworld/v1"
+	"github.com/itsping999/greeting/internal/pkg/tracingx"
+	"github.com/itsping999/greeting/internal/service"
 
 	"github.com/go-kratos/kratos/v2/transport/grpc"
 )

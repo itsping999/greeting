@@ -19,7 +19,7 @@ Agent 从 [AGENTS.md](AGENTS.md) 开始，人和 Agent 共用 [文档总导航](
 
 ## 快速开始
 
-需要 Go 1.27.1 或更高版本、make 和 Python 3.9 及以上。生成代码已包含在仓库中，普通构建无需安装 protoc 或生成器。
+需要 Go 1.27.2 或更高版本、make 和 Python 3.9 及以上。生成代码已包含在仓库中，普通构建无需安装 protoc 或生成器。
 
 ```sh
 make doctor

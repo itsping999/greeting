@@ -60,3 +60,5 @@ checks 含 postgres、redis、mongodb，值为 up/down/skipped；禁用客户端
 | [配置输入](configuration.md) | 配置文件、字段、默认行为与显式环境覆盖 |
 
 proto 源仍在仓库根 api/；interfaces/ 是文档分类。新增契约写清调用时机、认证、参数位置/类型/必填/约束、成功/错误与兼容。实现边界见 [架构](../architecture/README.md)，操作步骤见 [开发](../development/README.md) 和 [运维](../operations/README.md)，维护要求见 [文档规范](../documentation-standard.md)。
+
+安全维护补充（2026-10-18）：未注册 HTTP 路径返回 404，已注册路径的方法不匹配返回 405，均不会转到全局 HTTP 处理器。已有问候、健康、配置及消息契约保持各自定义。

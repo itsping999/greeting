@@ -2,6 +2,7 @@ SHELL := /bin/sh
 TOOLS_DIR := $(CURDIR)/.tools/bin
 PROTOC ?= protoc
 DOCS_PYTHON ?= python3
+GOVULNCHECK_VERSION := v1.9.0
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 GO_LDFLAGS := -X main.Version=$(VERSION)
 API_PROTO_FILES := $(shell find api -name '*.proto' | sort)
@@ -51,7 +52,7 @@ docker-build-linux-arm64:
 	mkdir -p bin/arm64
 	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags "$(GO_LDFLAGS)" -o bin/arm64/app ./cmd/server
 
-.PHONY: doctor task fmt fmt-check check-generated check-docs check
+.PHONY: doctor task fmt fmt-check check-generated check-docs init-security vuln-check check
 doctor:
 	python3 scripts/dev.py doctor
 task:
@@ -66,6 +67,11 @@ check-docs:
 	$(DOCS_PYTHON) -B docs/development/test_check_docs.py
 	$(DOCS_PYTHON) -B scripts/test_dev.py
 	$(DOCS_PYTHON) -B docs/development/check_docs.py
+init-security:
+	mkdir -p $(TOOLS_DIR)
+	GOBIN=$(TOOLS_DIR) go install golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION)
+vuln-check:
+	$(TOOLS_DIR)/govulncheck -test ./...
 check:
 	$(MAKE) check-docs
 	$(MAKE) fmt-check

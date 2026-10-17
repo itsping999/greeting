@@ -4,7 +4,7 @@ Keep this Go / Kratos template lightweight, explicit, and easy to extend. The ca
 
 ## Setup and workflow
 
-Use Go 1.27.1 or newer. Run make doctor; install protoc and the pinned generators with make init when regeneration or generated consistency checks are needed. The default configuration disables optional external services.
+Use Go 1.27.2 or newer. Run make doctor; install protoc and the pinned generators with make init when regeneration or generated consistency checks are needed. The default configuration disables optional external services.
 
 Read the [architecture](docs/architecture/README.md) and relevant [development sections](docs/development/README.md), plus the applicable contract before changing code. Go changes use focused checks, then make fmt and make check. Markdown-only changes use make check-docs and git diff --check. Choose additional smoke or integration checks from the [validation table](docs/development/README.md#验证选择).
 

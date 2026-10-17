@@ -62,7 +62,8 @@ func Init(cfg *Config, appName, appVersion string, logger log.Logger) (func(), e
 		),
 	)
 
-	helper.Infof("tracing enabled: exporter=%s endpoint=%s", cfg.Exporter, cfg.Endpoint)
+	// Endpoints can contain credentials or signed query strings.
+	helper.Infof("tracing enabled: exporter=%s", cfg.Exporter)
 	cleanup := func() {
 		timeout := durationOrDefault(cfg.Timeout, 5*time.Second)
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)

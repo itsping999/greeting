@@ -2,11 +2,11 @@
 
 - 适用范围：greeting
 - 维护责任：开发与工具维护者
-- 核对日期：2026-10-13
+- 核对日期：2026-10-18（依赖与安全验证入口；现场环境另行验收）
 
 ## 开发上手
 
-需要 Go 1.27.1 或更高版本、make、Python 3.9 及以上；先 make doctor。已有生成物支持普通构建，proto/Wire 变化或生成一致性检查需要 protoc 和 make init 安装的固定工具；工具在忽略的 .tools/bin，安装需要网络。
+需要 Go 1.27.2 或更高版本、make、Python 3.9 及以上；先 make doctor。已有生成物支持普通构建，proto/Wire 变化或生成一致性检查需要 protoc 和 make init 安装的固定工具；工具在忽略的 .tools/bin，安装需要网络。
 
 默认只启用 HTTP/gRPC，不要求数据库或 Broker。最小运行与另一终端验证：
 
@@ -40,6 +40,8 @@ curl -fsS http://127.0.0.1:8000/healthz
 | make check | 文档、格式、vet、race、生成一致性和构建 |
 | make check-generated | 在临时副本生成比较，不修改当前源码 |
 | make check-docs | 文档结构/链接、隔离回归与任务工具验证 |
+| make init-security | 安装固定版本的官方 govulncheck 到 .tools/bin |
+| make vuln-check | 扫描含测试的调用路径；有漏洞记录时返回非零，需结合实际防护审阅 |
 | make smoke | 临时端口验证六种无中间件协议和退出 |
 | make examples-smoke | 增加 MQTT/RabbitMQ，创建并清理专属 Docker 资源 |
 | make scaffold-smoke | 临时副本真实生成普通/CRUD 模块、接线、Wire、编译与生成一致性 |
@@ -94,3 +96,9 @@ make verify 等价于 make check；make generated-check 等价于 make check-gen
 文档检查不补写文件、不联网、不读取运行配置或生成缓存，文档工具与 [任务工具](../../scripts/dev.py) 使用临时隔离样例。入口包括 [检查器](check_docs.py)、[检查回归](test_check_docs.py)、[任务回归](../../scripts/test_dev.py)，具体规则见 [文档规范](../documentation-standard.md)。
 
 完成时记录实际命令、结果、失败原因和未验证影响，不以单元测试或构建代替部署/恢复。计划回写正式文档；提交、推送、部署和发送消息仍需用户授权。
+
+## 依赖安全检查
+
+依赖变化运行 go mod tidy、完整检查、相应协议烟测和 make vuln-check。需要模块级对照时执行 .tools/bin/govulncheck -C cmd/server -scan=module；模块记录、导入包、实际调用与 GitHub 告警是不同口径。JSON 格式即使有发现也可能退出成功，不能只看退出码。
+
+当前 Kratos v2.9.2 的 [GO-2026-5471](https://pkg.go.dev/vuln/GO-2026-5471) 尚无上游修复版本。本项目通过显式 404/405 兜底处理器阻止全局 ServeMux 暴露，并以真实 HTTP 回归证明；扫描仍会报告其版本/调用记录，不标为扫描清零、不关闭检测，也不自动忽略。详见 [修复记录](../plans/dependency-security.md) 与 [架构边界](../architecture/README.md#访问与资源边界)。

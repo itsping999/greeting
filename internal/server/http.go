@@ -52,6 +52,11 @@ func newHTTPServer(
 	}
 	var opts = []http.ServerOption{
 		http.Middleware(commonMiddlewares(logger, tracingCfg, middlewareCfg)...),
+		// Global mux registrations, including pprof, must not become fallback routes.
+		http.NotFoundHandler(nethttp.NotFoundHandler()),
+		http.MethodNotAllowedHandler(nethttp.HandlerFunc(func(w nethttp.ResponseWriter, _ *nethttp.Request) {
+			w.WriteHeader(nethttp.StatusMethodNotAllowed)
+		})),
 	}
 	if c.Network != "" {
 		opts = append(opts, http.Network(c.Network))

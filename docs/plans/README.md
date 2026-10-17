@@ -23,6 +23,7 @@ make task NAME=order-create 使用 [任务模板](task-template.md)，创建并�
 <!-- task-index:start -->
 | 计划 | 状态 | 范围 |
 | --- | --- | --- |
+| [依赖安全告警修复](dependency-security.md) | In progress | 漏洞定位、依赖升级、兼容验证与复扫 |
 <!-- task-index:end -->
 
 ## 已完成与历史记录

@@ -101,4 +101,6 @@ make verify 等价于 make check；make generated-check 等价于 make check-gen
 
 依赖变化运行 go mod tidy、完整检查、相应协议烟测和 make vuln-check。需要模块级对照时执行 .tools/bin/govulncheck -C cmd/server -scan=module；模块记录、导入包、实际调用与 GitHub 告警是不同口径。JSON 格式即使有发现也可能退出成功，不能只看退出码。
 
+同时核对 GitHub/OSV 的已审阅告警，避免数据库收录时间不同造成漏项；例如 RabbitMQ 的 [协商前帧限制漏洞](https://github.com/advisories/GHSA-w6r9-248c-frg8) 要求 1.14.0，1.13.0 的早期修复并不完整。本项目保留安全的伪连接回归验证提前分配受控小内存的问题，并以本地 Broker 验证正常请求/回复。
+
 当前 Kratos v2.9.2 的 [GO-2026-5471](https://pkg.go.dev/vuln/GO-2026-5471) 尚无上游修复版本。本项目通过显式 404/405 兜底处理器阻止全局 ServeMux 暴露，并以真实 HTTP 回归证明；扫描仍会报告其版本/调用记录，不标为扫描清零、不关闭检测，也不自动忽略。详见 [修复记录](../plans/dependency-security.md) 与 [架构边界](../architecture/README.md#访问与资源边界)。

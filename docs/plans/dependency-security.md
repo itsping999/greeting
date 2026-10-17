@@ -31,7 +31,7 @@
 
 - make doctor 通过；工作区起始干净，当前本机 Go 1.27.2，仓库 go.mod/CI/镜像基线为 1.27.1。
 - 已安装官方 govulncheck v1.9.0 到忽略的 .tools/bin，扫描报告保存在系统临时目录，不提交原始扫描缓存。
-- 升级 gRPC 1.83.2、RabbitMQ 1.13.0、Redis 9.7.3、MongoDB 1.17.7、pgx 5.9.2、Paho 1.5.1、OpenTelemetry 1.45.0/Prometheus 0.67.0，以及相应 crypto/net/text/sys/CEL/compress。版本选择同时满足修复分支和依赖约束；未升级无关可选功能到新主版本。
+- 升级 gRPC 1.83.2、RabbitMQ 1.14.0、Redis 9.7.3、MongoDB 1.17.7、pgx 5.9.2、Paho 1.5.1、OpenTelemetry 1.45.0/Prometheus 0.67.0，以及相应 crypto/net/text/sys/CEL/compress。版本选择同时满足修复分支和依赖约束；未升级无关可选功能到新主版本。
 - Go 最低版本、CI 和镜像构建基线升至 1.27.2；go mod tidy 清理旧校验项。追踪初始化移除 endpoint 日志，避免应用自身重现凭据泄漏。
 - HTTP 全局 ServeMux 回归在旧代码下失败（两个分支返回 200、全局处理器被调用 2 次），防护后通过；追踪 endpoint 日志回归同样先失败后通过。
 - make fmt、make check 通过，包含文档/任务工具回归、vet、race、生成一致性与服务/客户端构建；make smoke 与 make examples-smoke 均通过，后者验证全部八种协议与退出，并核对本次专属容器、网络和卷清理。
@@ -55,6 +55,10 @@ make scaffold-smoke 通过，在临时副本真实生成普通 invoice 和 CRUD 
 本地可修复依赖、HTTP/日志防护和兼容验收已完成，准备按用户刚才的提交流程交付。GitHub 原始 47 条告警的明细、更新与关闭状态尚未取得登录权限，计划保持 In progress，未以本地扫描替代远端状态。
 
 修复提交 2e36772 已推送 main，远端依赖图更新与 Docker 作业成功。Go 作业在文档门槛失败：Linux 嵌套 make 的目录提示出现在输出末尾，原测试错误要求路径必须是最后一行。本地通过强制 --print-directory 复现；改为验证路径行恰好出现一次，原创建、索引、防覆盖与共享门槛断言保留，远端 Go 验证待复跑。
+
+GitHub 后续推送回执已从 47 项降至 2 项、均为中危。为交叉核对，使用 OSV 批量查询完整 Go 模块图：RabbitMQ 的 GHSA-w6r9-248c-frg8 仍影响 1.13.0，Go 漏洞库尚未收录，按上游修复要求补升 1.14.0。新增不联网的伪连接回归，1.13.0 下确认在协商前申请了 2 MiB 缓冲区；升级后验证在申请前拒绝。其余仅存在于完整模块图的额外记录通过 go mod why 核对为主模块不需要的模块，不混作实际导入或调用。
+
+补升后的伪连接 race 回归、make fmt、make check、八协议 examples-smoke 均通过；OSV 查询 RabbitMQ 1.14.0 返回无已知记录。CI 输出兼容修复提交 78fa2e8 的远端 CI 已全部成功。最后的 RabbitMQ 补升与对应回归准备提交，最新镜像重建与远端复扫继续核对。
 
 ## 正式文档回写与完成
 

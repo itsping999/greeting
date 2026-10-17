@@ -10,7 +10,7 @@ require (
 	github.com/google/wire v0.7.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/prometheus/client_golang v1.24.1
-	github.com/rabbitmq/amqp091-go v1.13.0
+	github.com/rabbitmq/amqp091-go v1.14.0
 	github.com/redis/go-redis/v9 v9.7.3
 	github.com/tx7do/kratos-transport v1.1.12
 	github.com/tx7do/kratos-transport/broker/mqtt v1.2.17

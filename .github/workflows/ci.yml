@@ -27,6 +27,9 @@ jobs:
       - name: Go environment
         run: go version
 
+      - name: Check documentation
+        run: make check-docs
+
       - name: Check formatting
         run: |
           unformatted=$(gofmt -l $(find . -path ./.git -prune -o -name '*.go' -print))

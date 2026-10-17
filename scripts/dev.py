@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Repository-local development helpers; standard library only."""
 import argparse
+from datetime import date
 import hashlib
+import importlib.util
 from pathlib import Path
 import re
 import shutil
@@ -101,10 +103,33 @@ def doctor():
 def task(name):
     if not re.fullmatch(r'[a-z][a-z0-9]*(?:-[a-z0-9]+)*', name):
         raise ValueError('NAME 必须是小写英文 slug，例如 order-create')
-    destination = ROOT / 'docs/tasks' / (name + '.md')
-    content = (ROOT / 'docs/tasks/TEMPLATE.md').read_text().replace('{{name}}', name)
-    with destination.open('x') as out:
+    spec = importlib.util.spec_from_file_location(
+        'documentation_gate', ROOT / 'docs/development/check_docs.py')
+    checker = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(checker)
+    if name == 'readme' or not checker.valid_name(name + '.md'):
+        raise ValueError('NAME 必须是稳定主题名称，不能使用临时、最新或副本名称')
+
+    directory = ROOT / 'docs/plans'
+    destination = directory / (name + '.md')
+    index = directory / 'README.md'
+    index_text = index.read_text(encoding='utf-8')
+    start, end = '<!-- task-index:start -->', '<!-- task-index:end -->'
+    if index_text.count(start) != 1 or index_text.count(end) != 1:
+        raise ValueError('计划索引必须包含唯一活动计划标记')
+    if index_text.index(start) >= index_text.index(end):
+        raise ValueError('计划索引的活动计划标记顺序错误')
+    content = (directory / 'task-template.md').read_text(encoding='utf-8')
+    content = content.replace('{{name}}', name).replace('{{date}}', date.today().isoformat())
+    entry = f'| [{name}]({name}.md) | Draft | 待填写范围 |\n'
+    updated_index = index_text.replace(end, entry + end, 1)
+    with destination.open('x', encoding='utf-8') as out:
         out.write(content)
+    try:
+        index.write_text(updated_index, encoding='utf-8')
+    except OSError:
+        destination.unlink()
+        raise
     print(destination.relative_to(ROOT))
     return 0
 

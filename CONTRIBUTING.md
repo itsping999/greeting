@@ -1,82 +1,25 @@
 # Contributing
 
-This template aims to stay lightweight, explicit, and easy to extend. Prefer Kratos, GORM, standard Go tooling, and the existing project helpers before adding new dependencies.
+Keep this Go / Kratos template lightweight, explicit, and easy to extend. The canonical project rules are linked from [AGENTS.md](AGENTS.md) and the [documentation index](docs/README.md).
 
-## Local Setup
+## Setup and workflow
 
-1. Install Go 1.27.1 and `protoc`.
-2. Install pinned generator tools:
+Use Go 1.27.1 or newer. Run make doctor; install protoc and the pinned generators with make init when regeneration or generated consistency checks are needed. The default configuration disables optional external services.
 
-```bash
-make init
-```
+Read the [architecture](docs/architecture/README.md) and relevant [development sections](docs/development/README.md), plus the applicable contract before changing code. Go changes use focused checks, then make fmt and make check. Markdown-only changes use make check-docs and git diff --check. Choose additional smoke or integration checks from the [validation table](docs/development/README.md#验证选择).
 
-3. Confirm required tools are available:
+## Modules and generated files
 
-```bash
-make doctor
-```
+Prefer make scaffold-module PROTO=order/v1/order.proto; add CRUD=1 for CRUD stubs. make scaffold-proto creates the source and registrations without the final Wire step. Both still require real business rules, storage behavior, and acceptance tests. Keep protobuf types at the service boundary, models and ports in biz, and outgoing adapters in data.
 
-The default config keeps external dependencies disabled, so PostgreSQL, Redis, MongoDB, RabbitMQ, MQTT, Kubernetes, and tracing backends are not required for a first local run.
+Never hand-edit API generated files, cmd/server/wire_gen.go, or openapi.yaml. After proto or constructor changes run make all; review generated outputs with their sources. Scaffold or registration changes also require make scaffold-smoke. Detailed ownership and command definitions live in the development documents.
 
-## Change Workflow
+## Plans, documentation, and delivery
 
-Run the narrowest useful command while working, then run the broader checks before finishing:
+Use make task NAME=order-create for complex cross-layer work; simple fixes need no plan. It creates an indexed plan under docs/plans/ without overwriting existing work. Keep status and evidence current, then complete the [formal-document writeback](docs/plans/README.md#完成与正式文档回写).
 
-| Change type | Required checks |
-| --- | --- |
-| Go code only | `make verify` |
-| Proto or API generation | `make api` then `make generated-check` |
-| Wire injector or provider set | `make generate` then `make generated-check` |
-| First-run tools or generator versions | `make init`, `make doctor`, `make generated-check` |
-| Docker image path | `make docker-build` |
-| Kubernetes manifests | `kubectl kustomize deploy/k8s` |
+Documentation and navigation changes must pass make check-docs and git diff --check and satisfy the [documentation standard](docs/documentation-standard.md). CI calls the same documentation gate; local results do not establish a remote CI result.
 
-Use `RUN_SMOKE=1 go test ./tests -run TestSmokeExternalDependencies` only when the expected external smoke services are available.
+Before delivery verify that defaults still run without optional external services, new optional providers have safe cleanup, deployment-facing configuration has explicit input and environment handling, and contracts/navigation reflect the final behavior. Record actual validation, exclusions, failures, and unverified scope.
 
-## Module Changes
-
-For new API modules, prefer the project scaffold:
-
-```bash
-# Basic scaffold: proto + service/biz/data stubs + auto-registration + config injection
-make scaffold-proto PROTO=order/v1/order.proto
-
-# CRUD scaffold: adds standard Create/Get/List/Update/Delete methods and fields
-make scaffold-proto PROTO=order/v1/order.proto CRUD=1
-
-# Full end-to-end: scaffold + wire regeneration (one command, ready to implement)
-make scaffold-module PROTO=order/v1/order.proto
-```
-
-The scaffold automatically:
-- Generates proto, service, biz, and data layer stubs
-- Registers the service in `internal/server/grpc.go` and `internal/server/http.go`
-- Updates wire provider sets (`service.go`, `biz.go`, `data.go`)
-- Injects a `remote_grpc` config entry in `configs/config.yaml`
-- With `CRUD=1`: generates standard CRUD RPCs, request/response messages, domain model, and repo/usecase method stubs
-
-Keep protobuf types at the service boundary; business models and interfaces belong in `internal/biz`, while outgoing adapters belong in `internal/data`.
-
-## Generated Files
-
-Do not hand-edit generated files:
-
-- `api/**/*.pb.go`
-- `api/**/*_grpc.pb.go`
-- `api/**/*_http.pb.go`
-- `api/**/*.pb.validate.go`
-- `cmd/server/wire_gen.go`
-- `openapi.yaml`
-
-Regenerate from the source proto or Wire injector and commit the generated outputs together with the source change.
-
-## Pull Request Checklist
-
-- Defaults still run locally without optional external services.
-- New optional providers return `(nil, cleanup, nil)` when disabled, and cleanup is safe to call.
-- New config has typed fields, safe defaults, and env overrides when deployment-facing.
-- Public docs and `AGENTS.md` are updated when commands, layer boundaries, generator behavior, or verification rules change.
-- Verification output is included in the PR description.
-
-脚手架或注册逻辑变化时运行 `make scaffold-smoke`：在临时副本真实生成普通与 CRUD 模块，验证注册、Wire、编译和生成一致性，不修改当前源码。需要 `make init` 安装的工具。
+Docker and Kubernetes changes use the relevant checks in the [release/deployment documents](docs/operations/README.md). Set RUN_SMOKE=1 only when the external smoke services are prepared. Commits, pushes, deployments, and message sending remain subject to the user's authorization.

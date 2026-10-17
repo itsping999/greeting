@@ -59,10 +59,11 @@ class TaskCommandTest(unittest.TestCase):
     def test_created_plan_is_indexed_and_passes_shared_gate(self):
         for name in ('order-create', 'invoice-export'):
             result = subprocess.run(
-                ['make', 'task', 'NAME=' + name, 'DOCS_PYTHON=' + sys.executable],
+                ['make', '--print-directory', 'task', 'NAME=' + name, 'DOCS_PYTHON=' + sys.executable],
                 cwd=self.root, capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertEqual(result.stdout.strip().splitlines()[-1], 'docs/plans/' + name + '.md')
+            # Nested GNU make may print directory diagnostics after the task output.
+            self.assertEqual(result.stdout.splitlines().count('docs/plans/' + name + '.md'), 1)
             content = (self.root / 'docs/plans' / (name + '.md')).read_text(encoding='utf-8')
             self.assertIn('# ' + name, content)
             self.assertIn('状态：Draft', content)
